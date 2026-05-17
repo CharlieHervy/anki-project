@@ -31,7 +31,7 @@ frontend/yarn-error.log*
 frontend/.pnpm-debug.log*
 
 # Frontend misc
-frontend/.DS_Store
+.DS_Store
 frontend/*.pem
 
 # Anki-exportfiler
