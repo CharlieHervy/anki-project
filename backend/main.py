@@ -19,14 +19,12 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-    "http://localhost:3000",
-    "https://anki-project-three.vercel.app",
-],
+    allow_origins=["*"],  # Asterisken säger till Railway att godkänna din Vercel-sida direkt!
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 def get_user_id(x_user_id: str = Header(...)):
