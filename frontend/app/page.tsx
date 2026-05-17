@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { UserButton, useUser } from '@clerk/nextjs'
 
-const API = 'http://localhost:8000'
+const API = 'https://anki-project-production.up.railway.app'
 
 type Card = {
   id: string
