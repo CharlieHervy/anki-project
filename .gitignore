@@ -1,4 +1,4 @@
-# Miljövariabler
+# Environment variables
 frontend/.env.local
 backend/.env
 
@@ -7,9 +7,32 @@ backend/venv/
 __pycache__/
 *.pyc
 
-# Node
+# Node / Frontend
 frontend/node_modules/
+frontend/.pnp
+frontend/.pnp.*
+frontend/.yarn/*
+!frontend/.yarn/patches
+!frontend/.yarn/plugins
+!frontend/.yarn/releases
+!frontend/.yarn/versions
+frontend/coverage/
 frontend/.next/
+frontend/out/
+frontend/build/
+frontend/.vercel/
+frontend/*.tsbuildinfo
+frontend/next-env.d.ts
+
+# Frontend logs
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+
+# Frontend misc
+frontend/.DS_Store
+frontend/*.pem
 
 # Anki-exportfiler
 /tmp/*.apkg
