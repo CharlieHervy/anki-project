@@ -1,0 +1,15 @@
+# Miljövariabler
+frontend/.env.local
+backend/.env
+
+# Python
+backend/venv/
+__pycache__/
+*.pyc
+
+# Node
+frontend/node_modules/
+frontend/.next/
+
+# Anki-exportfiler
+/tmp/*.apkg
