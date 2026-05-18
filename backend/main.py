@@ -19,11 +19,15 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Asterisken säger till Railway att godkänna din Vercel-sida direkt!
-    allow_credentials=False,
+    allow_origins=[
+        "http://localhost:3000",
+        "https://vercel.app"
+    ],
+    allow_credentials=True,  # Tillbakasatt till True!
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 
 
