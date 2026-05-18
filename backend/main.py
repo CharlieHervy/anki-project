@@ -50,6 +50,7 @@ def get_user_id(x_user_id: str = Header(None)):
 
 @app.post("/api/generate")
 async def generate(
+    request: Request,
     source_material: str = Form(...),
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db)
@@ -125,13 +126,19 @@ async def generate(
             else:
                 yield f"data: {json.dumps({'type': 'error', 'message': f'Fel: {error_msg}'})}\n\n"
 
+    origin = request.headers.get("origin", "")
+    response_headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+    if origin in ALLOWED_ORIGINS:
+        response_headers["Access-Control-Allow-Origin"] = origin
+        response_headers["Access-Control-Allow-Credentials"] = "true"
+
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        }
+        headers=response_headers,
     )
 
 
