@@ -31,10 +31,9 @@ app.add_middleware(
 
 
 
-def get_user_id(x_user_id: str = Header(...)):
-    """Hämtar user_id från request header."""
-    if not x_user_id:
-        raise HTTPException(status_code=401, detail="Ej autentiserad")
+def get_user_id(x_user_id: str = Header(None)):
+    if not x_user_id or x_user_id == "":
+        return "anonymous_user"
     return x_user_id
 
 
