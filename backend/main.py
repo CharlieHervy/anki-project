@@ -6,31 +6,39 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
 from sqlalchemy.orm import Session
-
 from generator import generate_cards_stream, parse_tsv
 from exporter import export_to_apkg
 from database import get_db, SessionModel, CardModel
 
 app = FastAPI()
 
+# 1. Standard-CORS för vanliga anrop
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000",
         "https://vercel.app"
     ],
-    allow_credentials=True,  # Tillbakasatt till True!
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# 2. Det manuella hacket som tvingar webbläsarens dolda OPTIONS-frågor att godkännas
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(request: Request, rest_of_path: str):
+    response = Response()
+    response.headers["Access-Control-Allow-Origin"] = "https://vercel.app"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, x-user-id, Accept, Origin"
+    return response
 
-
-
+# 3. Den uppdaterade användarfunktionen med fallback för MVP
 def get_user_id(x_user_id: str = Header(None)):
     if not x_user_id or x_user_id == "":
         return "anonymous_user"
