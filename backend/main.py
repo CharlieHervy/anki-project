@@ -17,22 +17,25 @@ from database import get_db, SessionModel, CardModel
 app = FastAPI()
 
 # 1. Standard-CORS för vanliga anrop
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "https://anki-project-three.vercel.app",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "https://vercel.app"
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 2. Det manuella hacket som tvingar webbläsarens dolda OPTIONS-frågor att godkännas
 @app.options("/{rest_of_path:path}")
 async def preflight_handler(request: Request, rest_of_path: str):
+    origin = request.headers.get("origin", "")
     response = Response()
-    response.headers["Access-Control-Allow-Origin"] = "https://vercel.app"
+    if origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
     response.headers["Access-Control-Allow-Credentials"] = "true"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, x-user-id, Accept, Origin"
