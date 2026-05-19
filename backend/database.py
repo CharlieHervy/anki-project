@@ -7,18 +7,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-engine = create_engine(
-    "postgresql+psycopg2://",
-    connect_args={
-        "host": os.environ.get("DB_HOST"),
-        "port": int(os.environ.get("DB_PORT", 6543)),
-        "database": os.environ.get("DB_NAME"),
-        "user": os.environ.get("DB_USER"),
-        "password": os.environ.get("DB_PASSWORD"),
-        "sslmode": "require",
-    },
-    pool_pre_ping=True
-)
+database_url = os.environ.get("DATABASE_URL", "").replace("postgresql://", "postgresql+psycopg2://")
+engine = create_engine(database_url, pool_pre_ping=True)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
