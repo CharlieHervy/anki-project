@@ -50,7 +50,6 @@ def get_user_id(x_user_id: str = Header(None)):
 
 @app.post("/api/generate")
 async def generate(
-    request: Request,
     source_material: str = Form(...),
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db)
@@ -61,37 +60,60 @@ async def generate(
     db.refresh(db_session)
     session_id = str(db_session.id)
 
-    full_tsv = ""
+    import asyncio
+    import queue
+    import threading
+
+    chunk_queue = queue.Queue()
+    DONE_SENTINEL = object()
+    ERROR_SENTINEL = object()
+
+    def run_generator():
+        try:
+            for chunk in generate_cards_stream(source_material):
+                chunk_queue.put(chunk)
+            chunk_queue.put(DONE_SENTINEL)
+        except Exception as e:
+            chunk_queue.put((ERROR_SENTINEL, str(e)))
 
     async def event_stream():
-        nonlocal full_tsv
+        full_tsv = ""
 
         yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
 
+        # Starta generatorn i en bakgrundstråd
+        thread = threading.Thread(target=run_generator, daemon=True)
+        thread.start()
+
         try:
-            import asyncio
-            loop = asyncio.get_event_loop()
+            while True:
+                # Hämta nästa chunk utan att blockera event loop
+                try:
+                    item = await asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: chunk_queue.get(timeout=120)
+                    )
+                except queue.Empty:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'Timeout – ingen respons från Claude.'})}\n\n"
+                    return
 
-            def run_generator():
-                chunks = []
-                for chunk in generate_cards_stream(source_material):
-                    chunks.append(chunk)
-                return chunks
-
-            chunks = await loop.run_in_executor(None, run_generator)
-
-            for chunk in chunks:
-                full_tsv += chunk
-                yield f"data: {json.dumps({'type': 'chunk', 'text': chunk})}\n\n"
+                if item is DONE_SENTINEL:
+                    break
+                elif isinstance(item, tuple) and item[0] is ERROR_SENTINEL:
+                    yield f"data: {json.dumps({'type': 'error', 'message': item[1]})}\n\n"
+                    return
+                else:
+                    full_tsv += item
+                    yield f"data: {json.dumps({'type': 'chunk', 'text': item})}\n\n"
 
             if not full_tsv.strip():
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Claude returnerade ingen output. Försök igen.'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Claude returnerade ingen output.'})}\n\n"
                 return
 
             cards = parse_tsv(full_tsv)
 
             if not cards:
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Inga kort kunde parsas. Kontrollera källmaterialet.'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Inga kort kunde parsas.'})}\n\n"
                 return
 
             db2 = next(get_db())
@@ -119,26 +141,16 @@ async def generate(
 
             yield f"data: {json.dumps({'type': 'done', 'card_count': len(cards)})}\n\n"
 
-        except Exception as e:
-            error_msg = str(e)
-            if 'timeout' in error_msg.lower():
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Förfrågan tog för lång tid.'})}\n\n"
-            else:
-                yield f"data: {json.dumps({'type': 'error', 'message': f'Fel: {error_msg}'})}\n\n"
-
-    origin = request.headers.get("origin", "")
-    response_headers = {
-        "Cache-Control": "no-cache",
-        "X-Accel-Buffering": "no",
-    }
-    if origin in ALLOWED_ORIGINS:
-        response_headers["Access-Control-Allow-Origin"] = origin
-        response_headers["Access-Control-Allow-Credentials"] = "true"
+        except asyncio.CancelledError:
+            pass
 
     return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
-        headers=response_headers,
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        }
     )
 
 
