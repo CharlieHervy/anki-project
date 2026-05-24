@@ -6,30 +6,45 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, Response
 from sqlalchemy.orm import Session
-
 from generator import generate_cards_stream, parse_tsv
 from exporter import export_to_apkg
 from database import get_db, SessionModel, CardModel
 
 app = FastAPI()
 
+# 1. Standard-CORS för vanliga anrop
+ALLOWED_ORIGINS = [
+    "http://localhost:3000",
+    "https://anki-project-three.vercel.app",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(request: Request, rest_of_path: str):
+    origin = request.headers.get("origin", "")
+    response = Response()
+    if origin in ALLOWED_ORIGINS:
+        response.headers["Access-Control-Allow-Origin"] = origin
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, x-user-id, Accept, Origin"
+    return response
 
-def get_user_id(x_user_id: str = Header(...)):
-    """Hämtar user_id från request header."""
-    if not x_user_id:
-        raise HTTPException(status_code=401, detail="Ej autentiserad")
+# 3. Den uppdaterade användarfunktionen med fallback för MVP
+def get_user_id(x_user_id: str = Header(None)):
+    if not x_user_id or x_user_id == "":
+        return "anonymous_user"
     return x_user_id
 
 
@@ -45,37 +60,60 @@ async def generate(
     db.refresh(db_session)
     session_id = str(db_session.id)
 
-    full_tsv = ""
+    import asyncio
+    import queue
+    import threading
+
+    chunk_queue = queue.Queue()
+    DONE_SENTINEL = object()
+    ERROR_SENTINEL = object()
+
+    def run_generator():
+        try:
+            for chunk in generate_cards_stream(source_material):
+                chunk_queue.put(chunk)
+            chunk_queue.put(DONE_SENTINEL)
+        except Exception as e:
+            chunk_queue.put((ERROR_SENTINEL, str(e)))
 
     async def event_stream():
-        nonlocal full_tsv
+        full_tsv = ""
 
         yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
 
+        # Starta generatorn i en bakgrundstråd
+        thread = threading.Thread(target=run_generator, daemon=True)
+        thread.start()
+
         try:
-            import asyncio
-            loop = asyncio.get_event_loop()
+            while True:
+                # Hämta nästa chunk utan att blockera event loop
+                try:
+                    item = await asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda: chunk_queue.get(timeout=120)
+                    )
+                except queue.Empty:
+                    yield f"data: {json.dumps({'type': 'error', 'message': 'Timeout – ingen respons från Claude.'})}\n\n"
+                    return
 
-            def run_generator():
-                chunks = []
-                for chunk in generate_cards_stream(source_material):
-                    chunks.append(chunk)
-                return chunks
-
-            chunks = await loop.run_in_executor(None, run_generator)
-
-            for chunk in chunks:
-                full_tsv += chunk
-                yield f"data: {json.dumps({'type': 'chunk', 'text': chunk})}\n\n"
+                if item is DONE_SENTINEL:
+                    break
+                elif isinstance(item, tuple) and item[0] is ERROR_SENTINEL:
+                    yield f"data: {json.dumps({'type': 'error', 'message': item[1]})}\n\n"
+                    return
+                else:
+                    full_tsv += item
+                    yield f"data: {json.dumps({'type': 'chunk', 'text': item})}\n\n"
 
             if not full_tsv.strip():
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Claude returnerade ingen output. Försök igen.'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Claude returnerade ingen output.'})}\n\n"
                 return
 
             cards = parse_tsv(full_tsv)
 
             if not cards:
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Inga kort kunde parsas. Kontrollera källmaterialet.'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Inga kort kunde parsas.'})}\n\n"
                 return
 
             db2 = next(get_db())
@@ -103,12 +141,8 @@ async def generate(
 
             yield f"data: {json.dumps({'type': 'done', 'card_count': len(cards)})}\n\n"
 
-        except Exception as e:
-            error_msg = str(e)
-            if 'timeout' in error_msg.lower():
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Förfrågan tog för lång tid.'})}\n\n"
-            else:
-                yield f"data: {json.dumps({'type': 'error', 'message': f'Fel: {error_msg}'})}\n\n"
+        except asyncio.CancelledError:
+            pass
 
     return StreamingResponse(
         event_stream(),

@@ -3,7 +3,7 @@
 import { useState, useRef } from 'react'
 import { UserButton, useUser } from '@clerk/nextjs'
 
-const API = 'http://localhost:8000'
+const API = 'https://anki-project-production.up.railway.app'
 
 type Card = {
   id: string
@@ -20,8 +20,8 @@ type AppState = 'upload' | 'generating' | 'review' | 'exporting' | 'done'
 export default function Home() {
   const { user } = useUser()
 
-  const authHeaders = {
-    'x-user-id': user?.id || '',
+      const authHeaders = {
+    'x-user-id': user?.id || 'anonymous_user',
   }
 
   const [state, setState] = useState<AppState>('upload')
