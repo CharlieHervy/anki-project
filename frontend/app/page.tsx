@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import { UserButton, useUser } from '@clerk/nextjs'
+import styles from './page.module.css'
 
 const API = 'https://anki-project-production.up.railway.app'
 
@@ -20,7 +21,7 @@ type AppState = 'upload' | 'generating' | 'review' | 'exporting' | 'done'
 export default function Home() {
   const { user } = useUser()
 
-      const authHeaders = {
+  const authHeaders = {
     'x-user-id': user?.id || 'anonymous_user',
   }
 
@@ -198,31 +199,29 @@ export default function Home() {
 
   // --- Rendering ---
   return (
-    <main className="min-h-screen flex flex-col items-center justify-start py-16 px-4">
-
+    <main className={styles.main}>
       {/* Header */}
-      <div className="mb-12 text-center relative w-full max-w-2xl">
-        <div className="absolute right-0 top-0">
+      <div className={styles.header}>
+        <div className={styles.userButtonContainer}>
           <UserButton />
         </div>
-        <h1 className="text-4xl font-bold tracking-tight text-gray-900">Techtona</h1>
-        <p className="mt-2 text-gray-500 text-sm">Klistra in eller ladda upp ditt källmaterial</p>
+        <h1 className={styles.title}>Techtona</h1>
+        <p className={styles.subtitle}>Klistra in eller ladda upp ditt källmaterial</p>
       </div>
 
       {/* STEG 1: Uppladdning */}
       {(state === 'upload' || state === 'generating') && (
-        <div className="w-full max-w-2xl flex flex-col gap-4">
-
+        <div className={styles.contentContainer}>
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-3">
-              <span className="text-red-400 mt-0.5 flex-shrink-0">⚠</span>
-              <div>
-                <p className="text-sm font-medium text-red-700">Något gick fel</p>
-                <p className="text-xs text-red-500 mt-0.5">{error}</p>
+            <div className={styles.errorAlert}>
+              <span className={styles.errorIcon}>⚠</span>
+              <div className={styles.errorContent}>
+                <p className={styles.errorTitle}>Något gick fel</p>
+                <p className={styles.errorMessage}>{error}</p>
               </div>
               <button
                 onClick={() => setError('')}
-                className="ml-auto text-red-300 hover:text-red-500 text-lg leading-none flex-shrink-0"
+                className={styles.errorClose}
               >
                 ×
               </button>
@@ -230,18 +229,18 @@ export default function Home() {
           )}
 
           <textarea
-            className="w-full h-64 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gray-300"
+            className={styles.textarea}
             placeholder="Klistra in ditt källmaterial här..."
             value={sourceText}
             onChange={e => setSourceText(e.target.value)}
             disabled={state === 'generating'}
           />
 
-          <div className="flex gap-3 items-center">
+          <div className={styles.buttonGroup}>
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={state === 'generating'}
-              className="px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 transition"
+              className={styles.buttonSecondary}
             >
               Ladda upp fil (.txt / .pdf)
             </button>
@@ -249,13 +248,13 @@ export default function Home() {
               ref={fileInputRef}
               type="file"
               accept=".txt,.pdf"
-              className="hidden"
+              className={styles.fileInput}
               onChange={handleFileUpload}
             />
             <button
               onClick={handleGenerate}
               disabled={!sourceText.trim() || state === 'generating'}
-              className="ml-auto px-6 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-40 transition"
+              className={styles.buttonPrimary}
             >
               {state === 'generating' ? 'Genererar...' : 'Generera kort →'}
             </button>
@@ -263,24 +262,22 @@ export default function Home() {
 
           {/* Streamingvy */}
           {state === 'generating' && (
-            <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">
-                  Genererar kort...
-                </p>
-                <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-                  <span className="text-xs text-gray-400 font-mono">
+            <div className={styles.streamingContainer}>
+              <div className={styles.streamingHeader}>
+                <p className={styles.streamingLabel}>Genererar kort...</p>
+                <div className={styles.streamingStatus}>
+                  <div className={styles.statusDot} />
+                  <span className={styles.timer}>
                     {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}
                   </span>
                 </div>
               </div>
-              <div className="h-48 overflow-y-auto">
-                <pre className="text-xs text-gray-600 whitespace-pre-wrap font-mono">
+              <div className={styles.streamingContent}>
+                <pre className={styles.streamingText}>
                   {streamText || 'Väntar på svar från Claude...'}
                 </pre>
               </div>
-              <p className="text-xs text-gray-300 mt-2">
+              <p className={styles.streamingNote}>
                 Kortgenerering tar vanligtvis 1–3 minuter beroende på källmaterialets längd.
               </p>
             </div>
@@ -290,92 +287,83 @@ export default function Home() {
 
       {/* STEG 2: Granskning */}
       {state === 'review' && (
-        <div className="w-full max-w-2xl flex flex-col gap-4">
-
-          <div className="flex items-center justify-between">
+        <div className={styles.contentContainer}>
+          <div className={styles.reviewHeader}>
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Granska kort</h2>
-              <p className="text-sm text-gray-500 mt-0.5">
+              <h2 className={styles.reviewTitle}>Granska kort</h2>
+              <p className={styles.reviewInfo}>
                 {approvedCount} av {cards.length} kort godkända
               </p>
             </div>
             <button
               onClick={handleExport}
               disabled={approvedCount === 0}
-              className="px-6 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-40 transition"
+              className={styles.exportButton}
             >
               Exportera .apkg →
             </button>
           </div>
 
-          <div className="flex flex-col gap-3">
+          <div className={styles.cardsList}>
             {cards.map((card, i) => (
               <div
                 key={i}
-                className={`rounded-xl border px-4 py-4 bg-white transition ${
-                  card.approved
-                    ? 'border-gray-200'
-                    : 'border-gray-100 opacity-40'
+                className={`${styles.card} ${
+                  card.approved ? styles.cardApproved : styles.cardRejected
                 }`}
               >
                 {editingIndex === i ? (
-                  <div className="flex flex-col gap-3">
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">
-                        Text
-                      </label>
+                  <div className={styles.editForm}>
+                    <div className={styles.editFormGroup}>
+                      <label className={styles.editLabel}>Text</label>
                       <textarea
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gray-300"
+                        className={styles.editTextarea}
                         rows={3}
                         value={editText}
                         onChange={e => setEditText(e.target.value)}
                         autoFocus
                       />
                     </div>
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">
-                        Extra
-                      </label>
+                    <div className={styles.editFormGroup}>
+                      <label className={styles.editLabel}>Extra</label>
                       <textarea
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gray-300"
+                        className={styles.editTextarea}
                         rows={2}
                         value={editExtra}
                         onChange={e => setEditExtra(e.target.value)}
                       />
                     </div>
-                    <div>
-                      <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">
-                        Kortlek
-                      </label>
+                    <div className={styles.editFormGroup}>
+                      <label className={styles.editLabel}>Kortlek</label>
                       <input
-                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 font-mono"
+                        className={styles.editInput}
                         value={editDeck}
                         onChange={e => setEditDeck(e.target.value)}
                       />
                     </div>
-                    <div className="flex gap-2 justify-end">
+                    <div className={styles.editActions}>
                       <button
                         onClick={cancelEdit}
-                        className="px-4 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 transition"
+                        className={styles.buttonSmallSecondary}
                       >
                         Avbryt
                       </button>
                       <button
                         onClick={() => saveEdit(i)}
-                        className="px-4 py-1.5 text-sm rounded-lg bg-gray-900 text-white hover:bg-gray-700 transition"
+                        className={styles.buttonSmallPrimary}
                       >
                         Spara
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-start justify-between gap-4">
+                  <div className={styles.cardContent}>
                     <div
-                      className="flex-1 min-w-0 cursor-pointer group"
+                      className={styles.cardText}
                       onClick={() => startEditing(i)}
                     >
                       <p
-                        className="text-sm text-gray-900 leading-relaxed group-hover:text-gray-600 transition"
+                        className={styles.cardTextContent}
                         dangerouslySetInnerHTML={{
                           __html: card.text.replace(
                             /\{\{c1::(.*?)\}\}/g,
@@ -384,23 +372,17 @@ export default function Home() {
                         }}
                       />
                       {card.extra && (
-                        <p className="text-xs text-gray-400 mt-2 leading-relaxed">
-                          {card.extra}
-                        </p>
+                        <p className={styles.cardExtra}>{card.extra}</p>
                       )}
-                      <p className="text-xs text-gray-300 mt-2 font-mono truncate">
-                        {card.deck}
-                      </p>
-                      <p className="text-xs text-gray-300 mt-0.5 opacity-0 group-hover:opacity-100 transition">
-                        Klicka för att redigera
-                      </p>
+                      <p className={styles.cardDeck}>{card.deck}</p>
+                      <p className={styles.cardEditHint}>Klicka för att redigera</p>
                     </div>
                     <button
                       onClick={() => toggleCard(i)}
-                      className={`flex-shrink-0 w-8 h-8 rounded-full border flex items-center justify-center text-sm transition ${
+                      className={`${styles.approvalButton} ${
                         card.approved
-                          ? 'border-gray-900 bg-gray-900 text-white'
-                          : 'border-gray-200 bg-white text-gray-300'
+                          ? styles.approvalButtonApproved
+                          : styles.approvalButtonRejected
                       }`}
                     >
                       {card.approved ? '✓' : ''}
@@ -411,11 +393,11 @@ export default function Home() {
             ))}
           </div>
 
-          <div className="flex justify-end mt-2">
+          <div className={styles.exportActions}>
             <button
               onClick={handleExport}
               disabled={approvedCount === 0}
-              className="px-6 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-40 transition"
+              className={styles.exportButton}
             >
               Exportera {approvedCount} kort som .apkg →
             </button>
@@ -425,36 +407,33 @@ export default function Home() {
 
       {/* STEG 3: Exporting */}
       {state === 'exporting' && (
-        <div className="text-center text-gray-500 text-sm">
-          Bygger .apkg-fil...
+        <div className={styles.exportContainer}>
+          <p className={styles.exportMessage}>
+            <span className={styles.exportEmoji}>📦</span>
+            Exporterar kort...
+          </p>
         </div>
       )}
 
-      {/* STEG 4: Klar */}
+      {/* STEG 4: Done */}
       {state === 'done' && (
-        <div className="w-full max-w-2xl text-center flex flex-col gap-4">
-          <div className="rounded-xl border border-gray-200 bg-white px-6 py-8">
-            <p className="text-2xl mb-2">✓</p>
-            <h2 className="text-lg font-semibold text-gray-900">Filen är nedladdad</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              Öppna techtona_export.apkg för att importera till Anki.
-            </p>
-          </div>
+        <div className={styles.doneContainer}>
+          <h2 className={styles.doneTitle}>Klart!</h2>
+          <p className={styles.doneMessage}>
+            Dina Anki-kort har exporterats och är klara att importeras.
+          </p>
           <button
             onClick={() => {
               setState('upload')
               setSourceText('')
               setCards([])
-              setStreamText('')
-              setSessionId('')
             }}
-            className="text-sm text-gray-400 hover:text-gray-600 transition"
+            className={styles.doneButton}
           >
-            Generera nya kort →
+            Skapa nya kort →
           </button>
         </div>
       )}
-
     </main>
   )
 }
