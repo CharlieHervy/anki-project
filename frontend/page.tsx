@@ -188,7 +188,7 @@ export default function Home() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'techtona_export.apkg'
+    a.download = 'dimindo_export.apkg'
     a.click()
     URL.revokeObjectURL(url)
     setState('done')
@@ -205,7 +205,7 @@ export default function Home() {
         <div className="absolute right-0 top-0">
           <UserButton />
         </div>
-        <h1 className="text-4xl font-bold tracking-tight text-gray-900">Techtona</h1>
+        <h1 className="text-4xl font-bold tracking-tight text-gray-900">Dimindo</h1>
         <p className="mt-2 text-gray-500 text-sm">Klistra in eller ladda upp ditt källmaterial</p>
       </div>
 
@@ -437,7 +437,7 @@ export default function Home() {
             <p className="text-2xl mb-2">✓</p>
             <h2 className="text-lg font-semibold text-gray-900">Filen är nedladdad</h2>
             <p className="text-sm text-gray-500 mt-1">
-              Öppna techtona_export.apkg för att importera till Anki.
+              Öppna dimindo_export.apkg för att importera till Anki.
             </p>
           </div>
           <button
