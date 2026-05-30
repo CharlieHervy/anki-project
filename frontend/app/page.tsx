@@ -380,6 +380,11 @@ export default function Home() {
                       {card.extra && (
                         <p className={styles.cardExtra}>{card.extra}</p>
                       )}
+                      {card.logg && (
+                        <p className={styles.cardLogg}>
+                          {card.logg.startsWith('Korrigerat') ? '⚠ Corrected: ' + card.logg.replace(/^Korrigerat från källans uppgift om /, '') : '+ Additional fact'}
+                        </p>
+                      )}
                       <p className={styles.cardDeck}>{card.deck}</p>
                       <p className={styles.cardEditHint}>Click to edit</p>
                     </div>
