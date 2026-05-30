@@ -1,8 +1,9 @@
 import { SignUp } from '@clerk/nextjs'
+import styles from './page.module.css'
 
 export default function SignUpPage() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50">
+    <main className={styles.main}>
       <SignUp />
     </main>
   )

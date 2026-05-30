@@ -1,8 +1,9 @@
 import { SignIn } from '@clerk/nextjs'
+import styles from './page.module.css'
 
 export default function SignInPage() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-gray-50">
+    <main className={styles.main}>
       <SignIn />
     </main>
   )
