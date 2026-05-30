@@ -1,0 +1,11 @@
+{
+  "name": "anki-projekt",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n frontend,backend -c blue,green \"cd frontend && pnpm dev\" \"cd backend && venv/bin/uvicorn main:app --reload\"",
+    "dev:frontend": "cd frontend && pnpm dev"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

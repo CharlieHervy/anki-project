@@ -39,7 +39,7 @@ export default function Home() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // --- Filuppladdning ---
+  // --- File Upload ---
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -54,7 +54,7 @@ export default function Home() {
     if (data.text) setSourceText(data.text)
   }
 
-  // --- Kortgenerering med SSE-streaming ---
+  // --- Card Generation with SSE Streaming ---
   async function handleGenerate() {
     if (!sourceText.trim()) return
     setState('generating')
@@ -106,17 +106,20 @@ export default function Home() {
               setError(event.message)
               setState('upload')
             }
-          } catch {}
+          } catch (err) {
+            console.error(err)
+          }
         }
       }
     } catch (err) {
       stopTimer()
-      setError('Något gick fel. Kontrollera att backend körs.')
+      setError('Something went wrong. Make sure the backend is running.')
       setState('upload')
+      console.error(err)
     }
   }
 
-  // --- Godkänn/avvisa kort ---
+  // --- Approve/Reject Cards ---
   async function toggleCard(index: number) {
     const updated = [...cards]
     updated[index].approved = !updated[index].approved
@@ -173,7 +176,7 @@ export default function Home() {
     }
   }
 
-  // --- Export till .apkg ---
+  // --- Export to .apkg ---
   async function handleExport() {
     setState('exporting')
     const res = await fetch(`${API}/api/export/${sessionId}`, {
@@ -181,7 +184,7 @@ export default function Home() {
       headers: authHeaders,
     })
     if (!res.ok) {
-      setError('Export misslyckades.')
+      setError('Export failed.')
       setState('review')
       return
     }
@@ -205,18 +208,18 @@ export default function Home() {
         <div className={styles.userButtonContainer}>
           <UserButton />
         </div>
-        <h1 className={styles.title}>Techtona</h1>
-        <p className={styles.subtitle}>Klistra in eller ladda upp ditt källmaterial</p>
+        <h1 className={styles.title}>Dimindo</h1>
+        <p className={styles.subtitle}>Paste or upload your source material</p>
       </div>
 
-      {/* STEG 1: Uppladdning */}
+      {/* STEP 1: Upload */}
       {(state === 'upload' || state === 'generating') && (
         <div className={styles.contentContainer}>
           {error && (
             <div className={styles.errorAlert}>
               <span className={styles.errorIcon}>⚠</span>
               <div className={styles.errorContent}>
-                <p className={styles.errorTitle}>Något gick fel</p>
+                <p className={styles.errorTitle}>Something went wrong</p>
                 <p className={styles.errorMessage}>{error}</p>
               </div>
               <button
@@ -230,10 +233,10 @@ export default function Home() {
 
           <textarea
             className={styles.textarea}
-            placeholder="Klistra in ditt källmaterial här..."
             value={sourceText}
             onChange={e => setSourceText(e.target.value)}
             disabled={state === 'generating'}
+            autoFocus
           />
 
           <div className={styles.buttonGroup}>
@@ -242,7 +245,7 @@ export default function Home() {
               disabled={state === 'generating'}
               className={styles.buttonSecondary}
             >
-              Ladda upp fil (.txt / .pdf)
+              Upload file (.txt / .pdf)
             </button>
             <input
               ref={fileInputRef}
@@ -256,15 +259,15 @@ export default function Home() {
               disabled={!sourceText.trim() || state === 'generating'}
               className={styles.buttonPrimary}
             >
-              {state === 'generating' ? 'Genererar...' : 'Generera kort →'}
+              {state === 'generating' ? 'Generating...' : 'Generate cards →'}
             </button>
           </div>
 
-          {/* Streamingvy */}
+          {/* Streaming view */}
           {state === 'generating' && (
             <div className={styles.streamingContainer}>
               <div className={styles.streamingHeader}>
-                <p className={styles.streamingLabel}>Genererar kort...</p>
+                <p className={styles.streamingLabel}>Generating cards...</p>
                 <div className={styles.streamingStatus}>
                   <div className={styles.statusDot} />
                   <span className={styles.timer}>
@@ -274,25 +277,25 @@ export default function Home() {
               </div>
               <div className={styles.streamingContent}>
                 <pre className={styles.streamingText}>
-                  {streamText || 'Väntar på svar från Claude...'}
+                  {streamText || 'Waiting for response from Claude...'}
                 </pre>
               </div>
               <p className={styles.streamingNote}>
-                Kortgenerering tar vanligtvis 1–3 minuter beroende på källmaterialets längd.
+                Card generation usually takes 1–3 minutes depending on the length of the source material.
               </p>
             </div>
           )}
         </div>
       )}
 
-      {/* STEG 2: Granskning */}
+      {/* STEP 2: Review */}
       {state === 'review' && (
         <div className={styles.contentContainer}>
           <div className={styles.reviewHeader}>
             <div>
-              <h2 className={styles.reviewTitle}>Granska kort</h2>
+              <h2 className={styles.reviewTitle}>Review Cards</h2>
               <p className={styles.reviewInfo}>
-                {approvedCount} av {cards.length} kort godkända
+                {approvedCount} of {cards.length} cards approved
               </p>
             </div>
             <button
@@ -300,7 +303,7 @@ export default function Home() {
               disabled={approvedCount === 0}
               className={styles.exportButton}
             >
-              Exportera .apkg →
+              Export .apkg →
             </button>
           </div>
 
@@ -334,7 +337,7 @@ export default function Home() {
                       />
                     </div>
                     <div className={styles.editFormGroup}>
-                      <label className={styles.editLabel}>Kortlek</label>
+                      <label className={styles.editLabel}>Deck</label>
                       <input
                         className={styles.editInput}
                         value={editDeck}
@@ -346,13 +349,13 @@ export default function Home() {
                         onClick={cancelEdit}
                         className={styles.buttonSmallSecondary}
                       >
-                        Avbryt
+                        Cancel
                       </button>
                       <button
                         onClick={() => saveEdit(i)}
                         className={styles.buttonSmallPrimary}
                       >
-                        Spara
+                        Save
                       </button>
                     </div>
                   </div>
@@ -375,7 +378,7 @@ export default function Home() {
                         <p className={styles.cardExtra}>{card.extra}</p>
                       )}
                       <p className={styles.cardDeck}>{card.deck}</p>
-                      <p className={styles.cardEditHint}>Klicka för att redigera</p>
+                      <p className={styles.cardEditHint}>Click to edit</p>
                     </div>
                     <button
                       onClick={() => toggleCard(i)}
@@ -399,28 +402,28 @@ export default function Home() {
               disabled={approvedCount === 0}
               className={styles.exportButton}
             >
-              Exportera {approvedCount} kort som .apkg →
+              Export {approvedCount} cards as .apkg →
             </button>
           </div>
         </div>
       )}
 
-      {/* STEG 3: Exporting */}
+      {/* STEP 3: Exporting */}
       {state === 'exporting' && (
         <div className={styles.exportContainer}>
           <p className={styles.exportMessage}>
             <span className={styles.exportEmoji}>📦</span>
-            Exporterar kort...
+            Exporting cards...
           </p>
         </div>
       )}
 
-      {/* STEG 4: Done */}
+      {/* STEP 4: Done */}
       {state === 'done' && (
         <div className={styles.doneContainer}>
-          <h2 className={styles.doneTitle}>Klart!</h2>
+          <h2 className={styles.doneTitle}>Done!</h2>
           <p className={styles.doneMessage}>
-            Dina Anki-kort har exporterats och är klara att importeras.
+            Your Anki cards have been exported and are ready to be imported.
           </p>
           <button
             onClick={() => {
@@ -430,7 +433,7 @@ export default function Home() {
             }}
             className={styles.doneButton}
           >
-            Skapa nya kort →
+            Create new cards →
           </button>
         </div>
       )}
