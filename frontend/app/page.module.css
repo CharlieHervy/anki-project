@@ -131,46 +131,6 @@
   display: none;
 }
 
-/* Button styles */
-.buttonSecondary {
-  padding: 0.5rem 1rem;
-  font-size: 0.875rem;
-  border-radius: 0.5rem;
-  border: 1px solid #e5e7eb;
-  background-color: #fff;
-  color: #1f2937;
-  transition: background-color 0.2s;
-}
-
-.buttonSecondary:hover {
-  background-color: #f3f4f6;
-}
-
-.buttonSecondary:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.buttonPrimary {
-  margin-left: auto;
-  padding: 0.5rem 1.5rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-radius: 0.5rem;
-  background-color: #1E88E5;
-  color: #fff;
-  transition: background-color 0.2s;
-}
-
-.buttonPrimary:hover {
-  background-color: #1565C0;
-}
-
-.buttonPrimary:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
 /* Streaming view */
 .streamingContainer {
   margin-top: 1rem;
@@ -389,8 +349,7 @@
   font-weight: 500;
 }
 
-.editTextarea,
-.editInput {
+:is(.editTextarea, .editInput) {
   border-radius: 0.5rem;
   border: 1px solid #e5e7eb;
   padding: 0.5rem 0.75rem;
@@ -398,8 +357,7 @@
   font-family: inherit;
 }
 
-.editTextarea:focus,
-.editInput:focus {
+:is(.editTextarea, .editInput):focus {
   outline: none;
   ring: 2px;
   ring-color: #d1d5db;
@@ -416,62 +374,6 @@
   justify-content: flex-end;
 }
 
-.buttonSmallSecondary {
-  padding: 0.375rem 1rem;
-  font-size: 0.875rem;
-  border-radius: 0.5rem;
-  border: 1px solid #e5e7eb;
-  background-color: #fff;
-  color: #1f2937;
-  transition: background-color 0.2s;
-  cursor: pointer;
-}
-
-.buttonSmallSecondary:hover {
-  background-color: #f3f4f6;
-}
-
-.buttonSmallPrimary {
-  padding: 0.375rem 1rem;
-  font-size: 0.875rem;
-  border-radius: 0.5rem;
-  background-color: #111827;
-  color: #fff;
-  transition: background-color 0.2s;
-  cursor: pointer;
-}
-
-.buttonSmallPrimary:hover {
-  background-color: #374151;
-}
-
-/* Export buttons */
-.exportButton {
-  padding: 0.5rem 1.5rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-radius: 0.5rem;
-  background-color: #111827;
-  color: #fff;
-  transition: background-color 0.2s;
-  cursor: pointer;
-}
-
-.exportButton:hover {
-  background-color: #374151;
-}
-
-.exportButton:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.exportActions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 0.5rem;
-}
-
 /* Export state */
 .exportContainer {
   width: 100%;
@@ -486,6 +388,12 @@
   font-size: 1rem;
   color: #1a1a1a;
   text-align: center;
+}
+
+.exportActions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
 }
 
 .exportEmoji {
@@ -516,18 +424,4 @@
   color: #6b7280;
 }
 
-.doneButton {
-  margin-top: 1rem;
-  padding: 0.5rem 1.5rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  border-radius: 0.5rem;
-  background-color: #111827;
-  color: #fff;
-  transition: background-color 0.2s;
-  cursor: pointer;
-}
 
-.doneButton:hover {
-  background-color: #374151;
-}

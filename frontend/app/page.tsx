@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { UserButton, useUser } from '@clerk/nextjs'
 import styles from './page.module.css'
+import Link from 'next/dist/client/link'
 
 const API = 'https://anki-project-production.up.railway.app'
 
@@ -208,8 +209,10 @@ export default function Home() {
         <div className={styles.userButtonContainer}>
           <UserButton />
         </div>
-        <h1 className={styles.title}>Dimindo</h1>
-        <p className={styles.subtitle}>Paste or upload your source material</p>
+        <h1 className={styles.title}><Link href="/">Dimindo</Link></h1>
+        <p className={styles.subtitle}>
+          {state === 'review' ? 'Review and approve your cards' : 'Paste or upload your source material'}
+        </p>
       </div>
 
       {/* STEP 1: Upload */}
@@ -243,7 +246,7 @@ export default function Home() {
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={state === 'generating'}
-              className={styles.buttonSecondary}
+              className="buttonSecondary"
             >
               Upload file (.txt / .pdf)
             </button>
@@ -257,7 +260,7 @@ export default function Home() {
             <button
               onClick={handleGenerate}
               disabled={!sourceText.trim() || state === 'generating'}
-              className={styles.buttonPrimary}
+              className="buttonPrimary"
             >
               {state === 'generating' ? 'Generating...' : 'Generate cards →'}
             </button>
@@ -277,7 +280,7 @@ export default function Home() {
               </div>
               <div className={styles.streamingContent}>
                 <pre className={styles.streamingText}>
-                  {streamText || 'Waiting for response from Claude...'}
+                  {streamText || 'Generating cards...'}
                 </pre>
               </div>
               <p className={styles.streamingNote}>
@@ -301,9 +304,9 @@ export default function Home() {
             <button
               onClick={handleExport}
               disabled={approvedCount === 0}
-              className={styles.exportButton}
+              className="exportButton"
             >
-              Export .apkg →
+              Export {approvedCount} cards as .apkg →
             </button>
           </div>
 
@@ -347,13 +350,13 @@ export default function Home() {
                     <div className={styles.editActions}>
                       <button
                         onClick={cancelEdit}
-                        className={styles.buttonSmallSecondary}
+                        className="buttonSmallSecondary"
                       >
                         Cancel
                       </button>
                       <button
                         onClick={() => saveEdit(i)}
-                        className={styles.buttonSmallPrimary}
+                        className="buttonSmallPrimary"
                       >
                         Save
                       </button>
@@ -400,7 +403,7 @@ export default function Home() {
             <button
               onClick={handleExport}
               disabled={approvedCount === 0}
-              className={styles.exportButton}
+              className="exportButton"
             >
               Export {approvedCount} cards as .apkg →
             </button>
@@ -431,7 +434,7 @@ export default function Home() {
               setSourceText('')
               setCards([])
             }}
-            className={styles.doneButton}
+            className="doneButton"
           >
             Create new cards →
           </button>
