@@ -20,6 +20,8 @@ app = FastAPI()
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://anki-project-three.vercel.app",
+    "https://www.dimindo.com",
+    "https://dimindo.com",
 ]
 
 app.add_middleware(
