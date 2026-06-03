@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { UserButton, useUser } from '@clerk/nextjs'
+import { useState, useRef, useEffect } from 'react'
+import { UserButton, useUser, SignInButton } from '@clerk/nextjs'
 import styles from './page.module.css'
 
 const API = 'https://anki-project-production.up.railway.app'
@@ -19,9 +19,9 @@ type Card = {
 type AppState = 'upload' | 'generating' | 'review' | 'exporting' | 'done'
 
 export default function Home() {
-  const { user } = useUser()
+  const { user, isLoaded } = useUser()
 
-      const authHeaders = {
+  const authHeaders = {
     'x-user-id': user?.id || 'anonymous_user',
   }
 
@@ -38,8 +38,24 @@ export default function Home() {
   const [editDeck, setEditDeck] = useState('')
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [showSignInPrompt, setShowSignInPrompt] = useState(false)
 
-  // --- Filuppladdning ---
+  // Restore session after sign-in
+  useEffect(() => {
+    if (user && isLoaded) {
+      const savedSessionId = sessionStorage.getItem('dimindo_session_id')
+      const savedCards = sessionStorage.getItem('dimindo_cards')
+      if (savedSessionId && savedCards) {
+        setSessionId(savedSessionId)
+        setCards(JSON.parse(savedCards))
+        setState('review')
+        sessionStorage.removeItem('dimindo_session_id')
+        sessionStorage.removeItem('dimindo_cards')
+      }
+    }
+  }, [user, isLoaded])
+
+  // --- File upload ---
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -54,7 +70,7 @@ export default function Home() {
     if (data.text) setSourceText(data.text)
   }
 
-  // --- Kortgenerering med SSE-streaming ---
+  // --- Card generation with SSE streaming ---
   async function handleGenerate() {
     if (!sourceText.trim()) return
     setState('generating')
@@ -111,12 +127,12 @@ export default function Home() {
       }
     } catch (err) {
       stopTimer()
-      setError('Något gick fel. Kontrollera att backend körs.')
+      setError('Something went wrong. Please try again.')
       setState('upload')
     }
   }
 
-  // --- Godkänn/avvisa kort ---
+  // --- Approve/reject card ---
   async function toggleCard(index: number) {
     const updated = [...cards]
     updated[index].approved = !updated[index].approved
@@ -173,15 +189,23 @@ export default function Home() {
     }
   }
 
-  // --- Export till .apkg ---
+  // --- Export to .apkg ---
   async function handleExport() {
+    // If not logged in, save session and show sign-in prompt
+    if (!user) {
+      sessionStorage.setItem('dimindo_session_id', sessionId)
+      sessionStorage.setItem('dimindo_cards', JSON.stringify(cards))
+      setShowSignInPrompt(true)
+      return
+    }
+
     setState('exporting')
     const res = await fetch(`${API}/api/export/${sessionId}`, {
       method: 'POST',
       headers: authHeaders,
     })
     if (!res.ok) {
-      setError('Export misslyckades.')
+      setError('Export failed. Please try again.')
       setState('review')
       return
     }
@@ -201,16 +225,50 @@ export default function Home() {
   return (
     <main className="min-h-screen flex flex-col items-center justify-start py-16 px-4">
 
+      {/* Sign-in prompt overlay */}
+      {showSignInPrompt && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl px-8 py-8 max-w-sm w-full text-center shadow-xl">
+            <p className="text-xl mb-1">✓</p>
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">
+              Your cards are ready
+            </h2>
+            <p className="text-sm text-gray-500 mb-6">
+              Create a free account to export your {approvedCount} cards as an Anki deck.
+            </p>
+            <SignInButton mode="redirect" forceRedirectUrl="/">
+              <button className="w-full px-6 py-2.5 text-sm font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-700 transition mb-3">
+                Sign up — it's free →
+              </button>
+            </SignInButton>
+            <button
+              onClick={() => setShowSignInPrompt(false)}
+              className="text-sm text-gray-400 hover:text-gray-600 transition"
+            >
+              Back to review
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-12 text-center relative w-full max-w-2xl">
         <div className="absolute right-0 top-0">
-          <UserButton />
+          {user ? (
+            <UserButton />
+          ) : (
+            <SignInButton mode="redirect" forceRedirectUrl="/">
+              <button className="px-4 py-1.5 text-sm rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition">
+                Sign in
+              </button>
+            </SignInButton>
+          )}
         </div>
         <h1 className="text-4xl font-bold tracking-tight text-gray-900">Dimindo</h1>
-        <p className="mt-2 text-gray-500 text-sm">Klistra in eller ladda upp ditt källmaterial</p>
+        <p className="mt-2 text-gray-500 text-sm">Paste or upload your source material</p>
       </div>
 
-      {/* STEG 1: Uppladdning */}
+      {/* STEP 1: Upload */}
       {(state === 'upload' || state === 'generating') && (
         <div className="w-full max-w-2xl flex flex-col gap-4">
 
@@ -218,7 +276,7 @@ export default function Home() {
             <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-3">
               <span className="text-red-400 mt-0.5 flex-shrink-0">⚠</span>
               <div>
-                <p className="text-sm font-medium text-red-700">Något gick fel</p>
+                <p className="text-sm font-medium text-red-700">Something went wrong</p>
                 <p className="text-xs text-red-500 mt-0.5">{error}</p>
               </div>
               <button
@@ -232,7 +290,7 @@ export default function Home() {
 
           <textarea
             className="w-full h-64 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gray-300"
-            placeholder="Klistra in ditt källmaterial här..."
+            placeholder="Paste your source material here..."
             value={sourceText}
             onChange={e => setSourceText(e.target.value)}
             disabled={state === 'generating'}
@@ -244,7 +302,7 @@ export default function Home() {
               disabled={state === 'generating'}
               className="px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 transition"
             >
-              Ladda upp fil (.txt / .pdf)
+              Upload file (.txt / .pdf)
             </button>
             <input
               ref={fileInputRef}
@@ -258,16 +316,16 @@ export default function Home() {
               disabled={!sourceText.trim() || state === 'generating'}
               className="ml-auto px-6 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-40 transition"
             >
-              {state === 'generating' ? 'Genererar...' : 'Generera kort →'}
+              {state === 'generating' ? 'Generating...' : 'Generate cards →'}
             </button>
           </div>
 
-          {/* Streamingvy */}
+          {/* Streaming view */}
           {state === 'generating' && (
             <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">
-                  Genererar kort...
+                  Generating cards...
                 </p>
                 <div className="flex items-center gap-2">
                   <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
@@ -278,26 +336,26 @@ export default function Home() {
               </div>
               <div className="h-48 overflow-y-auto">
                 <pre className="text-xs text-gray-600 whitespace-pre-wrap font-mono">
-                  {streamText || 'Väntar på svar från Claude...'}
+                  {streamText || 'Waiting for Claude...'}
                 </pre>
               </div>
               <p className="text-xs text-gray-300 mt-2">
-                Kortgenerering tar vanligtvis 1–3 minuter beroende på källmaterialets längd.
+                Card generation usually takes 1–3 minutes depending on the length of your source material.
               </p>
             </div>
           )}
         </div>
       )}
 
-      {/* STEG 2: Granskning */}
+      {/* STEP 2: Review */}
       {state === 'review' && (
         <div className="w-full max-w-2xl flex flex-col gap-4">
 
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Granska kort</h2>
+              <h2 className="text-lg font-semibold text-gray-900">Review cards</h2>
               <p className="text-sm text-gray-500 mt-0.5">
-                {approvedCount} av {cards.length} kort godkända
+                {approvedCount} of {cards.length} cards approved
               </p>
             </div>
             <button
@@ -305,7 +363,7 @@ export default function Home() {
               disabled={approvedCount === 0}
               className="px-6 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-40 transition"
             >
-              Exportera .apkg →
+              Export {approvedCount} cards as .apkg →
             </button>
           </div>
 
@@ -346,7 +404,7 @@ export default function Home() {
                     </div>
                     <div>
                       <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">
-                        Kortlek
+                        Deck
                       </label>
                       <input
                         className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 font-mono"
@@ -359,13 +417,13 @@ export default function Home() {
                         onClick={cancelEdit}
                         className="px-4 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 transition"
                       >
-                        Avbryt
+                        Cancel
                       </button>
                       <button
                         onClick={() => saveEdit(i)}
                         className="px-4 py-1.5 text-sm rounded-lg bg-gray-900 text-white hover:bg-gray-700 transition"
                       >
-                        Spara
+                        Save
                       </button>
                     </div>
                   </div>
@@ -392,8 +450,14 @@ export default function Home() {
                       <p className="text-xs text-gray-300 mt-2 font-mono truncate">
                         {card.deck}
                       </p>
+                      {card.logg && (
+                        <p className="text-xs text-amber-500 mt-1 flex items-center gap-1">
+                          <span>⚑</span>
+                          <span>{card.logg}</span>
+                        </p>
+                      )}
                       <p className="text-xs text-gray-300 mt-0.5 opacity-0 group-hover:opacity-100 transition">
-                        Klicka för att redigera
+                        Click to edit
                       </p>
                     </div>
                     <button
@@ -418,27 +482,27 @@ export default function Home() {
               disabled={approvedCount === 0}
               className="px-6 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-40 transition"
             >
-              Exportera {approvedCount} kort som .apkg →
+              Export {approvedCount} cards as .apkg →
             </button>
           </div>
         </div>
       )}
 
-      {/* STEG 3: Exporting */}
+      {/* STEP 3: Exporting */}
       {state === 'exporting' && (
         <div className="text-center text-gray-500 text-sm">
-          Bygger .apkg-fil...
+          Building .apkg file...
         </div>
       )}
 
-      {/* STEG 4: Klar */}
+      {/* STEP 4: Done */}
       {state === 'done' && (
         <div className="w-full max-w-2xl text-center flex flex-col gap-4">
           <div className="rounded-xl border border-gray-200 bg-white px-6 py-8">
             <p className="text-2xl mb-2">✓</p>
-            <h2 className="text-lg font-semibold text-gray-900">Filen är nedladdad</h2>
+            <h2 className="text-lg font-semibold text-gray-900">File downloaded</h2>
             <p className="text-sm text-gray-500 mt-1">
-              Öppna dimindo_export.apkg för att importera till Anki.
+              Open dimindo_export.apkg to import into Anki.
             </p>
           </div>
           <button
@@ -451,7 +515,7 @@ export default function Home() {
             }}
             className="text-sm text-gray-400 hover:text-gray-600 transition"
           >
-            Generera nya kort →
+            Generate new cards →
           </button>
         </div>
       )}
