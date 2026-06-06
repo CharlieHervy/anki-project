@@ -286,12 +286,12 @@ async def export(
         for c in cards
     ]
 
-    output_path = f"/tmp/techtona_{session_id}.apkg"
+    output_path = f"/tmp/dimindo_{session_id}.apkg"
     export_to_apkg(cards_data, output_path)
 
     return FileResponse(
         path=output_path,
-        filename="techtona_export.apkg",
+        filename="dimindo_export.apkg",
         media_type="application/octet-stream"
     )
 

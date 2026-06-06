@@ -3,7 +3,7 @@ import { ClerkProvider } from '@clerk/nextjs'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'Techtona',
+  title: 'Dimindo',
   description: 'AI-genererade Anki-kort från ditt källmaterial',
 }
 

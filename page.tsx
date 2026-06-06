@@ -193,7 +193,7 @@ export default function Home() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'techtona_export.apkg'
+    a.download = 'dimindo_export.apkg'
     a.click()
     URL.revokeObjectURL(url)
     setState('done')
