@@ -1,9 +1,8 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { UserButton, useUser } from '@clerk/nextjs'
+import { useState, useRef, useEffect } from 'react'
+import { UserButton, useUser, SignInButton } from '@clerk/nextjs'
 import styles from './page.module.css'
-import Link from 'next/dist/client/link'
 
 const API = 'https://anki-project-production.up.railway.app'
 
@@ -20,7 +19,7 @@ type Card = {
 type AppState = 'upload' | 'generating' | 'review' | 'exporting' | 'done'
 
 export default function Home() {
-  const { user } = useUser()
+  const { user, isLoaded } = useUser()
 
   const authHeaders = {
     'x-user-id': user?.id || 'anonymous_user',
@@ -39,8 +38,24 @@ export default function Home() {
   const [editDeck, setEditDeck] = useState('')
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const [showSignInPrompt, setShowSignInPrompt] = useState(false)
 
-  // --- File Upload ---
+  // Restore session after sign-in
+  useEffect(() => {
+    if (user && isLoaded) {
+      const savedSessionId = sessionStorage.getItem('dimindo_session_id')
+      const savedCards = sessionStorage.getItem('dimindo_cards')
+      if (savedSessionId && savedCards) {
+        setSessionId(savedSessionId)
+        setCards(JSON.parse(savedCards))
+        setState('review')
+        sessionStorage.removeItem('dimindo_session_id')
+        sessionStorage.removeItem('dimindo_cards')
+      }
+    }
+  }, [user, isLoaded])
+
+  // --- File upload ---
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -55,7 +70,7 @@ export default function Home() {
     if (data.text) setSourceText(data.text)
   }
 
-  // --- Card Generation with SSE Streaming ---
+  // --- Card generation with SSE streaming ---
   async function handleGenerate() {
     if (!sourceText.trim()) return
     setState('generating')
@@ -107,20 +122,17 @@ export default function Home() {
               setError(event.message)
               setState('upload')
             }
-          } catch (err) {
-            console.error(err)
-          }
+          } catch {}
         }
       }
     } catch (err) {
       stopTimer()
-      setError('Something went wrong. Make sure the backend is running.')
+      setError('Something went wrong. Please try again.')
       setState('upload')
-      console.error(err)
     }
   }
 
-  // --- Approve/Reject Cards ---
+  // --- Approve/reject card ---
   async function toggleCard(index: number) {
     const updated = [...cards]
     updated[index].approved = !updated[index].approved
@@ -179,13 +191,21 @@ export default function Home() {
 
   // --- Export to .apkg ---
   async function handleExport() {
+    // If not logged in, save session and show sign-in prompt
+    if (!user) {
+      sessionStorage.setItem('dimindo_session_id', sessionId)
+      sessionStorage.setItem('dimindo_cards', JSON.stringify(cards))
+      setShowSignInPrompt(true)
+      return
+    }
+
     setState('exporting')
     const res = await fetch(`${API}/api/export/${sessionId}`, {
       method: 'POST',
       headers: authHeaders,
     })
     if (!res.ok) {
-      setError('Export failed.')
+      setError('Export failed. Please try again.')
       setState('review')
       return
     }
@@ -193,7 +213,7 @@ export default function Home() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = 'techtona_export.apkg'
+    a.download = 'dimindo_export.apkg'
     a.click()
     URL.revokeObjectURL(url)
     setState('done')
@@ -203,31 +223,65 @@ export default function Home() {
 
   // --- Rendering ---
   return (
-    <main className={styles.main}>
-      {/* Header */}
-      <div className={styles.header}>
-        <div className={styles.userButtonContainer}>
-          <UserButton />
+    <main className="min-h-screen flex flex-col items-center justify-start py-16 px-4">
+
+      {/* Sign-in prompt overlay */}
+      {showSignInPrompt && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl px-8 py-8 max-w-sm w-full text-center shadow-xl">
+            <p className="text-xl mb-1">✓</p>
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">
+              Your cards are ready
+            </h2>
+            <p className="text-sm text-gray-500 mb-6">
+              Create a free account to export your {approvedCount} cards as an Anki deck.
+            </p>
+            <SignInButton mode="redirect" forceRedirectUrl="/">
+              <button className="w-full px-6 py-2.5 text-sm font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-700 transition mb-3">
+                Sign up — it's free →
+              </button>
+            </SignInButton>
+            <button
+              onClick={() => setShowSignInPrompt(false)}
+              className="text-sm text-gray-400 hover:text-gray-600 transition"
+            >
+              Back to review
+            </button>
+          </div>
         </div>
-        <h1 className={styles.title}><Link href="/">Dimindo</Link></h1>
-        <p className={styles.subtitle}>
-          {state === 'review' ? 'Review and approve your cards' : 'Paste or upload your source material'}
-        </p>
+      )}
+
+      {/* Header */}
+      <div className="mb-12 text-center relative w-full max-w-2xl">
+        <div className="absolute right-0 top-0">
+          {user ? (
+            <UserButton />
+          ) : (
+            <SignInButton mode="redirect" forceRedirectUrl="/">
+              <button className="px-4 py-1.5 text-sm rounded-lg border border-gray-200 bg-white hover:bg-gray-50 transition">
+                Sign in
+              </button>
+            </SignInButton>
+          )}
+        </div>
+        <h1 className="text-4xl font-bold tracking-tight text-gray-900">Dimindo</h1>
+        <p className="mt-2 text-gray-500 text-sm">Paste or upload your source material</p>
       </div>
 
       {/* STEP 1: Upload */}
       {(state === 'upload' || state === 'generating') && (
-        <div className={styles.contentContainer}>
+        <div className="w-full max-w-2xl flex flex-col gap-4">
+
           {error && (
-            <div className={styles.errorAlert}>
-              <span className={styles.errorIcon}>⚠</span>
-              <div className={styles.errorContent}>
-                <p className={styles.errorTitle}>Something went wrong</p>
-                <p className={styles.errorMessage}>{error}</p>
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3 flex items-start gap-3">
+              <span className="text-red-400 mt-0.5 flex-shrink-0">⚠</span>
+              <div>
+                <p className="text-sm font-medium text-red-700">Something went wrong</p>
+                <p className="text-xs text-red-500 mt-0.5">{error}</p>
               </div>
               <button
                 onClick={() => setError('')}
-                className={styles.errorClose}
+                className="ml-auto text-red-300 hover:text-red-500 text-lg leading-none flex-shrink-0"
               >
                 ×
               </button>
@@ -235,18 +289,18 @@ export default function Home() {
           )}
 
           <textarea
-            className={styles.textarea}
+            className="w-full h-64 rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gray-300"
+            placeholder="Paste your source material here..."
             value={sourceText}
             onChange={e => setSourceText(e.target.value)}
             disabled={state === 'generating'}
-            autoFocus
           />
 
-          <div className={styles.buttonGroup}>
+          <div className="flex gap-3 items-center">
             <button
               onClick={() => fileInputRef.current?.click()}
               disabled={state === 'generating'}
-              className="buttonSecondary"
+              className="px-4 py-2 text-sm rounded-lg border border-gray-200 bg-white hover:bg-gray-50 disabled:opacity-40 transition"
             >
               Upload file (.txt / .pdf)
             </button>
@@ -254,13 +308,13 @@ export default function Home() {
               ref={fileInputRef}
               type="file"
               accept=".txt,.pdf"
-              className={styles.fileInput}
+              className="hidden"
               onChange={handleFileUpload}
             />
             <button
               onClick={handleGenerate}
               disabled={!sourceText.trim() || state === 'generating'}
-              className="buttonPrimary"
+              className="ml-auto px-6 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-40 transition"
             >
               {state === 'generating' ? 'Generating...' : 'Generate cards →'}
             </button>
@@ -268,23 +322,25 @@ export default function Home() {
 
           {/* Streaming view */}
           {state === 'generating' && (
-            <div className={styles.streamingContainer}>
-              <div className={styles.streamingHeader}>
-                <p className={styles.streamingLabel}>Generating cards...</p>
-                <div className={styles.streamingStatus}>
-                  <div className={styles.statusDot} />
-                  <span className={styles.timer}>
+            <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">
+                  Generating cards...
+                </p>
+                <div className="flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                  <span className="text-xs text-gray-400 font-mono">
                     {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}
                   </span>
                 </div>
               </div>
-              <div className={styles.streamingContent}>
-                <pre className={styles.streamingText}>
-                  {streamText || 'Generating cards...'}
+              <div className="h-48 overflow-y-auto">
+                <pre className="text-xs text-gray-600 whitespace-pre-wrap font-mono">
+                  {streamText || 'Waiting for Claude...'}
                 </pre>
               </div>
-              <p className={styles.streamingNote}>
-                Card generation usually takes 1–3 minutes depending on the length of the source material.
+              <p className="text-xs text-gray-300 mt-2">
+                Card generation usually takes 1–3 minutes depending on the length of your source material.
               </p>
             </div>
           )}
@@ -293,83 +349,92 @@ export default function Home() {
 
       {/* STEP 2: Review */}
       {state === 'review' && (
-        <div className={styles.contentContainer}>
-          <div className={styles.reviewHeader}>
+        <div className="w-full max-w-2xl flex flex-col gap-4">
+
+          <div className="flex items-center justify-between">
             <div>
-              <h2 className={styles.reviewTitle}>Review Cards</h2>
-              <p className={styles.reviewInfo}>
+              <h2 className="text-lg font-semibold text-gray-900">Review cards</h2>
+              <p className="text-sm text-gray-500 mt-0.5">
                 {approvedCount} of {cards.length} cards approved
               </p>
             </div>
             <button
               onClick={handleExport}
               disabled={approvedCount === 0}
-              className="exportButton"
+              className="px-6 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-40 transition"
             >
               Export {approvedCount} cards as .apkg →
             </button>
           </div>
 
-          <div className={styles.cardsList}>
+          <div className="flex flex-col gap-3">
             {cards.map((card, i) => (
               <div
                 key={i}
-                className={`${styles.card} ${
-                  card.approved ? styles.cardApproved : styles.cardRejected
+                className={`rounded-xl border px-4 py-4 bg-white transition ${
+                  card.approved
+                    ? 'border-gray-200'
+                    : 'border-gray-100 opacity-40'
                 }`}
               >
                 {editingIndex === i ? (
-                  <div className={styles.editForm}>
-                    <div className={styles.editFormGroup}>
-                      <label className={styles.editLabel}>Text</label>
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">
+                        Text
+                      </label>
                       <textarea
-                        className={styles.editTextarea}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gray-300"
                         rows={3}
                         value={editText}
                         onChange={e => setEditText(e.target.value)}
                         autoFocus
                       />
                     </div>
-                    <div className={styles.editFormGroup}>
-                      <label className={styles.editLabel}>Extra</label>
+                    <div>
+                      <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">
+                        Extra
+                      </label>
                       <textarea
-                        className={styles.editTextarea}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-gray-300"
                         rows={2}
                         value={editExtra}
                         onChange={e => setEditExtra(e.target.value)}
                       />
                     </div>
-                    <div className={styles.editFormGroup}>
-                      <label className={styles.editLabel}>Deck</label>
+                    <div>
+                      <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">
+                        Deck
+                      </label>
                       <input
-                        className={styles.editInput}
+                        className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300 font-mono"
                         value={editDeck}
                         onChange={e => setEditDeck(e.target.value)}
                       />
                     </div>
-                    <div className={styles.editActions}>
+                    <div className="flex gap-2 justify-end">
                       <button
                         onClick={cancelEdit}
-                        className="buttonSmallSecondary"
+                        className="px-4 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 transition"
                       >
                         Cancel
                       </button>
                       <button
                         onClick={() => saveEdit(i)}
-                        className="buttonSmallPrimary"
+                        className="px-4 py-1.5 text-sm rounded-lg bg-gray-900 text-white hover:bg-gray-700 transition"
                       >
                         Save
                       </button>
                     </div>
                   </div>
                 ) : (
-                  <div className={styles.cardContent}>
+                  <div className="flex items-start justify-between gap-4">
                     <div
-                      className={styles.cardText}
+                      className="flex-1 min-w-0 cursor-pointer group"
                       onClick={() => startEditing(i)}
                     >
                       <p
-                        className={styles.cardTextContent}
+                        className="text-sm text-gray-900 leading-relaxed group-hover:text-gray-600 transition"
                         dangerouslySetInnerHTML={{
                           __html: card.text.replace(
                             /\{\{c1::(.*?)\}\}/g,
@@ -378,22 +443,29 @@ export default function Home() {
                         }}
                       />
                       {card.extra && (
-                        <p className={styles.cardExtra}>{card.extra}</p>
-                      )}
-                      {card.logg && (
-                        <p className={styles.cardLogg}>
-                          {card.logg.startsWith('Korrigerat') ? '⚠ Corrected: ' + card.logg.replace(/^Korrigerat från källans uppgift om /, '') : '+ Additional fact'}
+                        <p className="text-xs text-gray-400 mt-2 leading-relaxed">
+                          {card.extra}
                         </p>
                       )}
-                      <p className={styles.cardDeck}>{card.deck}</p>
-                      <p className={styles.cardEditHint}>Click to edit</p>
+                      <p className="text-xs text-gray-300 mt-2 font-mono truncate">
+                        {card.deck}
+                      </p>
+                      {card.logg && (
+                        <p className="text-xs text-amber-500 mt-1 flex items-center gap-1">
+                          <span>⚑</span>
+                          <span>{card.logg}</span>
+                        </p>
+                      )}
+                      <p className="text-xs text-gray-300 mt-0.5 opacity-0 group-hover:opacity-100 transition">
+                        Click to edit
+                      </p>
                     </div>
                     <button
                       onClick={() => toggleCard(i)}
-                      className={`${styles.approvalButton} ${
+                      className={`flex-shrink-0 w-8 h-8 rounded-full border flex items-center justify-center text-sm transition ${
                         card.approved
-                          ? styles.approvalButtonApproved
-                          : styles.approvalButtonRejected
+                          ? 'border-gray-900 bg-gray-900 text-white'
+                          : 'border-gray-200 bg-white text-gray-300'
                       }`}
                     >
                       {card.approved ? '✓' : ''}
@@ -404,11 +476,11 @@ export default function Home() {
             ))}
           </div>
 
-          <div className={styles.exportActions}>
+          <div className="flex justify-end mt-2">
             <button
               onClick={handleExport}
               disabled={approvedCount === 0}
-              className="exportButton"
+              className="px-6 py-2 text-sm font-medium rounded-lg bg-gray-900 text-white hover:bg-gray-700 disabled:opacity-40 transition"
             >
               Export {approvedCount} cards as .apkg →
             </button>
@@ -418,33 +490,36 @@ export default function Home() {
 
       {/* STEP 3: Exporting */}
       {state === 'exporting' && (
-        <div className={styles.exportContainer}>
-          <p className={styles.exportMessage}>
-            <span className={styles.exportEmoji}>📦</span>
-            Exporting cards...
-          </p>
+        <div className="text-center text-gray-500 text-sm">
+          Building .apkg file...
         </div>
       )}
 
       {/* STEP 4: Done */}
       {state === 'done' && (
-        <div className={styles.doneContainer}>
-          <h2 className={styles.doneTitle}>Done!</h2>
-          <p className={styles.doneMessage}>
-            Your Anki cards have been exported and are ready to be imported.
-          </p>
+        <div className="w-full max-w-2xl text-center flex flex-col gap-4">
+          <div className="rounded-xl border border-gray-200 bg-white px-6 py-8">
+            <p className="text-2xl mb-2">✓</p>
+            <h2 className="text-lg font-semibold text-gray-900">File downloaded</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Open dimindo_export.apkg to import into Anki.
+            </p>
+          </div>
           <button
             onClick={() => {
               setState('upload')
               setSourceText('')
               setCards([])
+              setStreamText('')
+              setSessionId('')
             }}
-            className="doneButton"
+            className="text-sm text-gray-400 hover:text-gray-600 transition"
           >
-            Create new cards →
+            Generate new cards →
           </button>
         </div>
       )}
+
     </main>
   )
 }
