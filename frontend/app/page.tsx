@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
-import { UserButton, useUser } from '@clerk/nextjs'
+import { UserButton, useUser, useClerk } from '@clerk/nextjs'
 import styles from './page.module.css'
 import Link from 'next/dist/client/link'
 
@@ -21,6 +21,7 @@ type AppState = 'upload' | 'generating' | 'review' | 'exporting' | 'done'
 
 export default function Home() {
   const { user } = useUser()
+  const { openSignIn } = useClerk()
 
   const authHeaders = {
     'x-user-id': user?.id || 'anonymous_user',
@@ -179,6 +180,10 @@ export default function Home() {
 
   // --- Export to .apkg ---
   async function handleExport() {
+    if (!user) {
+      openSignIn()
+      return
+    }
     setState('exporting')
     const res = await fetch(`${API}/api/export/${sessionId}`, {
       method: 'POST',
