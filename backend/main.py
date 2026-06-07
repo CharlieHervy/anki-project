@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, StreamingResponse, Response
 from sqlalchemy.orm import Session
 from generator import generate_cards_stream, parse_tsv
 from exporter import export_to_apkg
-from database import get_db, SessionModel, CardModel
+from database import get_db, SessionModel, CardModel, DemoCard
 
 app = FastAPI()
 

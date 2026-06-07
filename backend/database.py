@@ -1,4 +1,5 @@
 import os
+import uuid
 from sqlalchemy import create_engine, Column, String, Boolean, Integer, DateTime, ForeignKey, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
@@ -39,6 +40,17 @@ class CardModel(Base):
     approved = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     session = relationship("SessionModel", back_populates="cards")
+
+
+class DemoCard(Base):
+    __tablename__ = "demo_cards"
+
+    id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    subject          = Column(String, nullable=False)
+    text             = Column(String, nullable=False)
+    extra            = Column(String, nullable=False)
+    highlight_phrase = Column(String, nullable=False)
+    position         = Column(Integer, nullable=False)
 
 
 def get_db():
