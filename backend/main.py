@@ -299,3 +299,40 @@ async def export(
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+VALID_DEMO_SUBJECTS = {"biology", "history", "chemistry", "medicine"}
+
+@app.get("/api/demo/cards")
+async def get_demo_cards(
+    subject: str,
+    db: Session = Depends(get_db)
+):
+    if subject not in VALID_DEMO_SUBJECTS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid subject. Valid values: {', '.join(sorted(VALID_DEMO_SUBJECTS))}"
+        )
+
+    cards = (
+        db.query(DemoCard)
+        .filter(DemoCard.subject == subject)
+        .order_by(DemoCard.position)
+        .all()
+    )
+
+    if not cards:
+        raise HTTPException(status_code=404, detail="No demo cards found for subject.")
+
+    return [
+        {
+            "id": str(card.id),
+            "subject": card.subject,
+            "text": card.text,
+            "extra": card.extra,
+            "highlight_phrase": card.highlight_phrase,
+            "position": card.position,
+            "approved": True,
+        }
+        for card in cards
+    ]
