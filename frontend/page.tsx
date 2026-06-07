@@ -1,8 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { UserButton, useUser, SignInButton } from '@clerk/nextjs'
-import styles from './page.module.css'
 
 const API = 'https://anki-project-production.up.railway.app'
 
@@ -20,6 +20,7 @@ type AppState = 'upload' | 'generating' | 'review' | 'exporting' | 'done'
 
 export default function Home() {
   const { user, isLoaded } = useUser()
+  const router = useRouter()
 
   const authHeaders = {
     'x-user-id': user?.id || 'anonymous_user',
@@ -39,6 +40,15 @@ export default function Home() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [showSignInPrompt, setShowSignInPrompt] = useState(false)
+
+  // Redirect first-time visitors to /demo
+  // Runs only after Clerk has resolved (isLoaded) to avoid redirecting logged-in users
+  useEffect(() => {
+    if (!isLoaded) return
+    if (user) return
+    if (localStorage.getItem('dimindo_demo_seen')) return
+    router.push('/demo')
+  }, [user, isLoaded, router])
 
   // Restore session after sign-in
   useEffect(() => {
