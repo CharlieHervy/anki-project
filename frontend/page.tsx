@@ -43,12 +43,11 @@ export default function Home() {
 
   // Redirect first-time visitors to /demo
   // Runs only after Clerk has resolved (isLoaded) to avoid redirecting logged-in users
-  useEffect(() => {
-    if (!isLoaded) return
-    if (user) return
-    if (localStorage.getItem('dimindo_demo_seen')) return
-    router.push('/demo')
-  }, [user, isLoaded, router])
+useEffect(() => {
+  if (localStorage.getItem('dimindo_demo_seen')) return
+  if (user) return
+  router.push('/demo')
+}, [user, router])
 
   // Restore session after sign-in
   useEffect(() => {
