@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { UserButton, useUser, useClerk } from '@clerk/nextjs'
 import styles from './page.module.css'
 import Link from 'next/dist/client/link'
@@ -20,7 +20,7 @@ type Card = {
 type AppState = 'upload' | 'generating' | 'review' | 'exporting' | 'done'
 
 export default function Home() {
-  const { user } = useUser()
+  const { user, isLoaded } = useUser()
   const { openSignIn } = useClerk()
 
   const authHeaders = {
@@ -37,9 +37,18 @@ export default function Home() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editText, setEditText] = useState('')
   const [editExtra, setEditExtra] = useState('')
-  const [editDeck, setEditDeck] = useState('')
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Restore source text after sign-in redirect
+  useEffect(() => {
+    if (!isLoaded || !user) return
+    const saved = sessionStorage.getItem('dimindo_source_text')
+    if (saved) {
+      setSourceText(saved)
+      sessionStorage.removeItem('dimindo_source_text')
+    }
+  }, [user, isLoaded])
 
   // --- File Upload ---
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -59,6 +68,11 @@ export default function Home() {
   // --- Card Generation with SSE Streaming ---
   async function handleGenerate() {
     if (!sourceText.trim()) return
+    if (!user) {
+      sessionStorage.setItem('dimindo_source_text', sourceText)
+      openSignIn()
+      return
+    }
     setState('generating')
     setStreamText('')
     setError('')
@@ -138,14 +152,12 @@ export default function Home() {
     setEditingIndex(index)
     setEditText(cards[index].text)
     setEditExtra(cards[index].extra)
-    setEditDeck(cards[index].deck)
   }
 
   async function saveEdit(index: number) {
     const updated = [...cards]
     updated[index].text = editText
     updated[index].extra = editExtra
-    updated[index].deck = editDeck
     setCards(updated)
     setEditingIndex(null)
 
@@ -155,7 +167,6 @@ export default function Home() {
       body: JSON.stringify({
         text: editText,
         extra: editExtra,
-        deck: editDeck,
       }),
     })
   }
@@ -180,10 +191,6 @@ export default function Home() {
 
   // --- Export to .apkg ---
   async function handleExport() {
-    if (!user) {
-      openSignIn()
-      return
-    }
     setState('exporting')
     const res = await fetch(`${API}/api/export/${sessionId}`, {
       method: 'POST',
@@ -344,14 +351,6 @@ export default function Home() {
                         onChange={e => setEditExtra(e.target.value)}
                       />
                     </div>
-                    <div className={styles.editFormGroup}>
-                      <label className={styles.editLabel}>Deck</label>
-                      <input
-                        className={styles.editInput}
-                        value={editDeck}
-                        onChange={e => setEditDeck(e.target.value)}
-                      />
-                    </div>
                     <div className={styles.editActions}>
                       <button
                         onClick={cancelEdit}
@@ -390,7 +389,6 @@ export default function Home() {
                           {card.logg.startsWith('Korrigerat') ? '⚠ Corrected: ' + card.logg.replace(/^Korrigerat från källans uppgift om /, '') : '+ Additional fact'}
                         </p>
                       )}
-                      <p className={styles.cardDeck}>{card.deck}</p>
                       <p className={styles.cardEditHint}>Click to edit</p>
                     </div>
                     <button
