@@ -126,7 +126,7 @@ export default function DemoPage() {
     timerRefs.current.forEach(t => clearTimeout(t))
     timerRefs.current = []
 
-    localStorage.setItem('dimindo_demo_seen', '1')
+    document.cookie = 'dimindo_demo_seen=1; path=/; max-age=31536000'
     setSubject(s)
     setVisibleCards([])
     setHighlightedPhrases([])
