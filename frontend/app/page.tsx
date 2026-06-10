@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from 'react'
 import { UserButton, useUser, useClerk } from '@clerk/nextjs'
 import styles from './page.module.css'
-import Link from 'next/dist/client/link'
 
 const API = 'https://anki-project-production.up.railway.app'
 
@@ -211,243 +210,244 @@ export default function Home() {
     setState('done')
   }
 
+  // Reset to blank upload state
+  function handleNewDeck() {
+    setState('upload')
+    setSourceText('')
+    setCards([])
+    setStreamText('')
+    setSessionId('')
+  }
+
   const approvedCount = cards.filter(c => c.approved).length
 
   // --- Rendering ---
   return (
-    <main className={styles.main}>
-      {/* Header */}
-      <div className={styles.header}>
-        <div className={styles.userButtonContainer}>
-          <UserButton />
-        </div>
-        <h1 className={styles.title}><Link href="/">Dimindo</Link></h1>
-        <p className={styles.subtitle}>
-          {state === 'review' ? 'Review and approve your cards' : 'Paste or upload your source material'}
-        </p>
-      </div>
+    <main className={styles.root}>
 
-      {/* STEP 1: Upload */}
-      {(state === 'upload' || state === 'generating') && (
-        <div className={styles.contentContainer}>
-          {error && (
-            <div className={styles.errorAlert}>
-              <span className={styles.errorIcon}>⚠</span>
-              <div className={styles.errorContent}>
-                <p className={styles.errorTitle}>Something went wrong</p>
-                <p className={styles.errorMessage}>{error}</p>
+      {/* ── Topbar ── */}
+      <header className={styles.topbar}>
+        <span className={styles.wordmark}>Dimindo</span>
+        <UserButton />
+      </header>
+
+      <div className={styles.content}>
+
+        {/* ══════════════════════════════════
+            STEP 1 — Upload / Generating
+        ══════════════════════════════════ */}
+        {(state === 'upload' || state === 'generating') && (
+          <>
+            {error && (
+              <div className={styles.error}>
+                <span className={styles.errorIcon}>⚠</span>
+                <div className={styles.errorBody}>
+                  <p className={styles.errorTitle}>Something went wrong</p>
+                  <p className={styles.errorMsg}>{error}</p>
+                </div>
+                <button onClick={() => setError('')} className={styles.errorClose}>
+                  ×
+                </button>
               </div>
+            )}
+
+            <p className={styles.eyebrow}>New deck</p>
+            <h1 className={styles.heading}>Upload your source material</h1>
+
+            <textarea
+              className={styles.textarea}
+              placeholder="Paste your source material here…"
+              value={sourceText}
+              onChange={e => setSourceText(e.target.value)}
+              disabled={state === 'generating'}
+              autoFocus
+            />
+
+            <div className={styles.buttonRow}>
               <button
-                onClick={() => setError('')}
-                className={styles.errorClose}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={state === 'generating'}
+                className={styles.btnSecondary}
               >
-                ×
+                Upload file (.txt / .pdf)
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".txt,.pdf"
+                className={styles.fileInput}
+                onChange={handleFileUpload}
+              />
+              <button
+                onClick={handleGenerate}
+                disabled={!sourceText.trim() || state === 'generating'}
+                className={styles.btnPrimary}
+              >
+                {state === 'generating' ? 'Generating…' : 'Generate cards →'}
               </button>
             </div>
-          )}
 
-          <textarea
-            className={styles.textarea}
-            value={sourceText}
-            onChange={e => setSourceText(e.target.value)}
-            disabled={state === 'generating'}
-            autoFocus
-          />
-
-          <div className={styles.buttonGroup}>
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={state === 'generating'}
-              className="buttonSecondary"
-            >
-              Upload file (.txt / .pdf)
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".txt,.pdf"
-              className={styles.fileInput}
-              onChange={handleFileUpload}
-            />
-            <button
-              onClick={handleGenerate}
-              disabled={!sourceText.trim() || state === 'generating'}
-              className="buttonPrimary"
-            >
-              {state === 'generating' ? 'Generating...' : 'Generate cards →'}
-            </button>
-          </div>
-
-          {/* Streaming view */}
-          {state === 'generating' && (
-            <div className={styles.streamingContainer}>
-              <div className={styles.streamingHeader}>
-                <p className={styles.streamingLabel}>Generating cards...</p>
-                <div className={styles.streamingStatus}>
-                  <div className={styles.statusDot} />
+            {/* Streaming view */}
+            {state === 'generating' && (
+              <div className={styles.streamBox}>
+                <div className={styles.streamHeader}>
+                  <p className={styles.streamLabel}>
+                    <span className={styles.scanDot} />
+                    Generating cards…
+                  </p>
                   <span className={styles.timer}>
                     {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}
                   </span>
                 </div>
+                <div className={styles.streamBody}>
+                  <pre className={styles.streamText}>
+                    {streamText || 'Waiting for Claude…'}
+                  </pre>
+                </div>
+                <p className={styles.streamNote}>
+                  Card generation usually takes 1–3 minutes depending on the length of the source material.
+                </p>
               </div>
-              <div className={styles.streamingContent}>
-                <pre className={styles.streamingText}>
-                  {streamText || 'Generating cards...'}
-                </pre>
-              </div>
-              <p className={styles.streamingNote}>
-                Card generation usually takes 1–3 minutes depending on the length of the source material.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </>
+        )}
 
-      {/* STEP 2: Review */}
-      {state === 'review' && (
-        <div className={styles.contentContainer}>
-          <div className={styles.reviewHeader}>
-            <div>
-              <h2 className={styles.reviewTitle}>Review Cards</h2>
-              <p className={styles.reviewInfo}>
-                {approvedCount} of {cards.length} cards approved
-              </p>
-            </div>
-            <button
-              onClick={handleExport}
-              disabled={approvedCount === 0}
-              className="exportButton"
-            >
-              Export {approvedCount} cards as .apkg →
+        {/* ══════════════════════════════════
+            STEP 2 — Review
+        ══════════════════════════════════ */}
+        {state === 'review' && (
+          <>
+            <button className={styles.reviewBack} onClick={handleNewDeck}>
+              ← New deck
             </button>
-          </div>
 
-          <div className={styles.cardsList}>
-            {cards.map((card, i) => (
-              <div
-                key={i}
-                className={`${styles.card} ${
-                  card.approved ? styles.cardApproved : styles.cardRejected
-                }`}
+            <div className={styles.reviewHeader}>
+              <div>
+                <h2 className={styles.reviewTitle}>Review cards</h2>
+                <p className={styles.reviewCount}>
+                  {approvedCount} of {cards.length} cards approved
+                </p>
+              </div>
+              <button
+                onClick={handleExport}
+                disabled={approvedCount === 0}
+                className={styles.exportBtn}
               >
-                {editingIndex === i ? (
-                  <div className={styles.editForm}>
-                    <div className={styles.editFormGroup}>
-                      <label className={styles.editLabel}>Text</label>
-                      <textarea
-                        className={styles.editTextarea}
-                        rows={3}
-                        value={editText}
-                        onChange={e => setEditText(e.target.value)}
-                        autoFocus
-                      />
-                    </div>
-                    <div className={styles.editFormGroup}>
-                      <label className={styles.editLabel}>Extra</label>
-                      <textarea
-                        className={styles.editTextarea}
-                        rows={2}
-                        value={editExtra}
-                        onChange={e => setEditExtra(e.target.value)}
-                      />
-                    </div>
-                    <div className={styles.editActions}>
-                      <button
-                        onClick={cancelEdit}
-                        className="buttonSmallSecondary"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={() => saveEdit(i)}
-                        className="buttonSmallPrimary"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className={styles.cardContent}>
-                    <div
-                      className={styles.cardText}
-                      onClick={() => startEditing(i)}
-                    >
-                      <p
-                        className={styles.cardTextContent}
-                        dangerouslySetInnerHTML={{
-                          __html: card.text.replace(
-                            /\{\{c1::(.*?)\}\}/g,
-                            '<strong>$1</strong>'
-                          ),
-                        }}
-                      />
-                      {card.extra && (
-                        <p className={styles.cardExtra}>{card.extra}</p>
-                      )}
-                      {card.logg && (
-                        <p className={styles.cardLogg}>
-                          {card.logg.startsWith('Korrigerat') ? '⚠ Corrected: ' + card.logg.replace(/^Korrigerat från källans uppgift om /, '') : '+ Additional fact'}
-                        </p>
-                      )}
-                      <p className={styles.cardEditHint}>Click to edit</p>
-                    </div>
-                    <button
-                      onClick={() => toggleCard(i)}
-                      className={`${styles.approvalButton} ${
-                        card.approved
-                          ? styles.approvalButtonApproved
-                          : styles.approvalButtonRejected
-                      }`}
-                    >
-                      {card.approved ? '✓' : ''}
-                    </button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
+                Export {approvedCount} cards as .apkg →
+              </button>
+            </div>
 
-          <div className={styles.exportActions}>
-            <button
-              onClick={handleExport}
-              disabled={approvedCount === 0}
-              className="exportButton"
-            >
-              Export {approvedCount} cards as .apkg →
+            <div className={styles.cardsList}>
+              {cards.map((card, i) => (
+                <div
+                  key={i}
+                  className={`${styles.card}${!card.approved ? ` ${styles.cardRejected}` : ''}`}
+                >
+                  {editingIndex === i ? (
+                    <div className={styles.editForm}>
+                      <div className={styles.fieldGroup}>
+                        <label className={styles.fieldLabel}>Text</label>
+                        <textarea
+                          className={styles.fieldTextarea}
+                          rows={3}
+                          value={editText}
+                          onChange={e => setEditText(e.target.value)}
+                          autoFocus
+                        />
+                      </div>
+                      <div className={styles.fieldGroup}>
+                        <label className={styles.fieldLabel}>Extra</label>
+                        <textarea
+                          className={styles.fieldTextarea}
+                          rows={2}
+                          value={editExtra}
+                          onChange={e => setEditExtra(e.target.value)}
+                        />
+                      </div>
+                      <div className={styles.editActions}>
+                        <button onClick={cancelEdit} className={styles.btnSmallGhost}>
+                          Cancel
+                        </button>
+                        <button onClick={() => saveEdit(i)} className={styles.btnSmallDark}>
+                          Save
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className={styles.cardContent}>
+                      <div className={styles.cardFront} onClick={() => startEditing(i)}>
+                        <p
+                          className={styles.cardTextContent}
+                          dangerouslySetInnerHTML={{
+                            __html: card.text.replace(
+                              /\{\{c1::(.*?)\}\}/g,
+                              '<strong>$1</strong>'
+                            ),
+                          }}
+                        />
+                        {card.extra && (
+                          <p className={styles.cardExtra}>{card.extra}</p>
+                        )}
+                        {card.logg && (
+                          <p className={styles.cardLogg}>
+                            {card.logg.startsWith('Korrigerat')
+                              ? '⚠ Corrected: ' + card.logg.replace(/^Korrigerat från källans uppgift om /, '')
+                              : '+ Additional fact'}
+                          </p>
+                        )}
+                        <p className={styles.cardHint}>Click to edit</p>
+                      </div>
+                      <button
+                        onClick={() => toggleCard(i)}
+                        className={`${styles.approveBtn}${card.approved ? ` ${styles.approveBtnOn}` : ''}`}
+                      >
+                        {card.approved ? '✓' : ''}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            <div className={styles.exportActions}>
+              <button
+                onClick={handleExport}
+                disabled={approvedCount === 0}
+                className={styles.exportBtn}
+              >
+                Export {approvedCount} cards as .apkg →
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ══════════════════════════════════
+            STEP 3 — Exporting
+        ══════════════════════════════════ */}
+        {state === 'exporting' && (
+          <p className={styles.exportingMsg}>
+            Building .apkg file…
+          </p>
+        )}
+
+        {/* ══════════════════════════════════
+            STEP 4 — Done
+        ══════════════════════════════════ */}
+        {state === 'done' && (
+          <>
+            <div className={styles.doneBox}>
+              <h2 className={styles.doneTitle}>File downloaded</h2>
+              <p className={styles.doneMsg}>
+                Open dimindo_export.apkg to import into Anki.
+              </p>
+            </div>
+            <button onClick={handleNewDeck} className={styles.resetBtn}>
+              Generate new cards →
             </button>
-          </div>
-        </div>
-      )}
+          </>
+        )}
 
-      {/* STEP 3: Exporting */}
-      {state === 'exporting' && (
-        <div className={styles.exportContainer}>
-          <p className={styles.exportMessage}>
-            <span className={styles.exportEmoji}>📦</span>
-            Exporting cards...
-          </p>
-        </div>
-      )}
-
-      {/* STEP 4: Done */}
-      {state === 'done' && (
-        <div className={styles.doneContainer}>
-          <h2 className={styles.doneTitle}>Done!</h2>
-          <p className={styles.doneMessage}>
-            Your Anki cards have been exported and are ready to be imported.
-          </p>
-          <button
-            onClick={() => {
-              setState('upload')
-              setSourceText('')
-              setCards([])
-            }}
-            className="doneButton"
-          >
-            Create new cards →
-          </button>
-        </div>
-      )}
+      </div>
     </main>
   )
 }
