@@ -558,6 +558,7 @@ def generate_cards_stream(source_material: str):
 def parse_tsv(tsv_text: str) -> list[dict]:
     """
     Parsar TSV-output från Claude till en lista av kort-dictionaries.
+    Leveransformat (4 kolumner): Text[TAB]Extra[TAB]Bild[TAB]Märkning
     """
     cards = []
     for line in tsv_text.strip().split('\n'):
@@ -565,34 +566,27 @@ def parse_tsv(tsv_text: str) -> list[dict]:
         if not stripped or stripped.startswith('#') or stripped == '```':
             continue
 
+        # Dela på tab utan att filtrera bort tomma kolumner —
+        # position är semantisk, tomma kolumner är giltiga värden
         cols = stripped.split('\t')
-        cols = [c.strip() for c in cols]
-        cols = [c for c in cols if c != '']
 
-        if len(cols) < 3:
+        if len(cols) < 2:
             continue
 
-        text  = cols[0] if len(cols) > 0 else ""
-        extra = cols[1] if len(cols) > 1 else ""
-        tags  = cols[2] if len(cols) > 2 else ""
+        text  = cols[0].strip()
+        extra = cols[1].strip() if len(cols) > 1 else ""
+        # cols[2] = Bild — alltid tom i AI-output, ignoreras
+        logg  = cols[3].strip() if len(cols) > 3 else ""
 
-        deck = "Huvudmeny"
-        logg = ""
-        for col in cols[3:]:
-            if col.startswith(('Huvudmeny', 'Hauptmeny')):
-                deck = col.replace('Hauptmeny', 'Huvudmeny')
-            elif col == 'Externt tillägg' or col.startswith('Korrigerat'):
-                logg = col
-
-        if not text or not deck:
+        if not text:
             continue
 
         cards.append({
-            "text": text,
-            "extra": extra,
-            "tags": tags,
-            "deck": deck,
-            "logg": logg,
+            "text":     text,
+            "extra":    extra,
+            "tags":     "",           # Taggar ingår inte i det nya formatet
+            "deck":     "Huvudmeny",  # Kortlek ingår inte i det nya formatet
+            "logg":     logg,
             "approved": True
         })
 
