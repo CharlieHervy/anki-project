@@ -132,3 +132,30 @@ pre {
 :is(.buttonSmallPrimary):hover {
   background-color: #374151;
 }
+
+/* ─────────────────────────────────────────────
+   Dimindo — global additions
+   Append this content to your existing globals.css
+───────────────────────────────────────────── */
+
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+/* Design tokens — referenced via var(--xxx) throughout the app */
+:root {
+  --ink:    #0d0d0d;
+  --paper:  #f7f5f0;
+  --cream:  #ede9e1;
+  --rule:   #d8d3c8;
+  --muted:  #8a8478;
+  --gold:   #c9a84c;
+  --scan:   #e8e200;
+}
+
+/* Universal reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}

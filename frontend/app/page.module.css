@@ -1,25 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
 
-/* ─────────────────────────────────────────────
-   Design tokens
-───────────────────────────────────────────── */
-:root {
-  --ink:    #0d0d0d;
-  --paper:  #f7f5f0;
-  --cream:  #ede9e1;
-  --rule:   #d8d3c8;
-  --muted:  #8a8478;
-  --gold:   #c9a84c;
-  --scan:   #e8e200;
-}
-
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
+/* Design tokens and universal reset are defined in globals.css */
 
 /* ─────────────────────────────────────────────
    Root
