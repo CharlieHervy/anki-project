@@ -34,6 +34,11 @@ Dölj svaret i luckan. Fråga: "Skulle en person utan ämneskunskap kunna gissa 
 
 </validation_protocol>
 
+<language>
+
+Generera kortens framsidor och extra-fält på det språk som anges i language-parametern. Om ingen parameter anges, generera på engelska.
+
+</language>
 
 <extraction_logic>
 
