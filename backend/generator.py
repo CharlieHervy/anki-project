@@ -41,6 +41,11 @@ Dölj svaret i luckan. Fråga: "Skulle en person utan ämneskunskap kunna gissa 
 
 </validation_protocol>
 
+<language>
+
+Generera kortens framsidor och extra-fält på det språk som anges i language-parametern. Om ingen parameter anges, generera på engelska.
+
+</language>
 
 <extraction_logic>
 
@@ -526,7 +531,7 @@ Kontextuell förstärkning (Sekundär källa - Wikipedia):
 </source_material>
 """
 
-def generate_cards_stream(source_material: str):
+def generate_cards_stream(source_material: str, language: str = "English"):
     """
     Streamer kortgenerering från Claude API med Extended Thinking.
     """
@@ -542,7 +547,11 @@ def generate_cards_stream(source_material: str):
         system=system,
         messages=[{
             "role": "user",
-            "content": "Generera korten nu. Leverera endast tabbseparerad rådata enligt leveransformatet. Omslut INTE outputen med kodblock eller backticks. Ingen hälsning, inget eftersnack."
+            "content": (
+                f"Generate the cards in {language}.\n"
+                "Generera korten nu. Leverera endast tabbseparerad rådata enligt leveransformatet. "
+                "Omslut INTE outputen med kodblock eller backticks. Ingen hälsning, inget eftersnack."
+            )
         }],
         betas=["interleaved-thinking-2025-05-14"]
     ) as stream:

@@ -53,6 +53,7 @@ def get_user_id(x_user_id: str = Header(None)):
 @app.post("/api/generate")
 async def generate(
     source_material: str = Form(...),
+    language: str = Form(default="English"),
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db)
 ):
@@ -72,7 +73,7 @@ async def generate(
 
     def run_generator():
         try:
-            for chunk in generate_cards_stream(source_material):
+            for chunk in generate_cards_stream(source_material, language):
                 chunk_queue.put(chunk)
             chunk_queue.put(DONE_SENTINEL)
         except Exception as e:

@@ -135,6 +135,29 @@
 .textarea:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ─────────────────────────────────────────────
+   Settings row (under textarea, above buttons)
+───────────────────────────────────────────── */
+.settingsRow {
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  padding: 10px 0;
+}
+
+.langSelect {
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 6px 10px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.875rem;
+  color: var(--ink);
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.langSelect:focus { border-color: var(--ink); }
+
+/* ─────────────────────────────────────────────
    Button row
 ───────────────────────────────────────────── */
 .buttonRow {
