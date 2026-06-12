@@ -273,6 +273,38 @@
 }
 
 /* ─────────────────────────────────────────────
+   Process view (replaces text streaming)
+───────────────────────────────────────────── */
+.processView {
+  margin-top: 24px;
+}
+
+/* Static gold dot — shown when done */
+.scanDotDone {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--gold);
+  flex-shrink: 0;
+}
+
+.streamCardsList {
+  margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.streamCard {
+  animation: cardEnter 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes cardEnter {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─────────────────────────────────────────────
    Review view
 ───────────────────────────────────────────── */
 .reviewBack {

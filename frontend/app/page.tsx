@@ -30,7 +30,8 @@ export default function Home() {
   const [sourceText, setSourceText] = useState('')
   const [sessionId, setSessionId] = useState('')
   const [cards, setCards] = useState<Card[]>([])
-  const [streamText, setStreamText] = useState('')
+  const [streamCards, setStreamCards] = useState<Card[]>([])
+  const [streamDone, setStreamDone] = useState(false)
   const [error, setError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
@@ -74,7 +75,8 @@ export default function Home() {
       return
     }
     setState('generating')
-    setStreamText('')
+    setStreamCards([])
+    setStreamDone(false)
     setError('')
     startTimer()
 
@@ -108,16 +110,17 @@ export default function Home() {
             if (event.type === 'session_id') {
               currentSessionId = event.session_id
               setSessionId(currentSessionId)
-            } else if (event.type === 'chunk') {
-              setStreamText(prev => prev + event.text)
+            } else if (event.type === 'card') {
+              setStreamCards(prev => [...prev, { ...event.data, approved: true, tags: '', deck: '' }])
             } else if (event.type === 'done') {
               stopTimer()
+              setStreamDone(true)
               const cardsRes = await fetch(`${API}/api/cards/${currentSessionId}`, {
                 headers: authHeaders,
               })
               const cardsData = await cardsRes.json()
               setCards(cardsData.cards)
-              setState('review')
+              setTimeout(() => setState('review'), 800)
             } else if (event.type === 'error') {
               stopTimer()
               setError(event.message)
@@ -217,7 +220,7 @@ export default function Home() {
     setState('upload')
     setSourceText('')
     setCards([])
-    setStreamText('')
+    setStreamCards([])
     setSessionId('')
   }
 
@@ -305,26 +308,37 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Streaming view */}
+            {/* Process view — replaces text streaming */}
             {state === 'generating' && (
-              <div className={styles.streamBox}>
+              <div className={styles.processView}>
                 <div className={styles.streamHeader}>
                   <p className={styles.streamLabel}>
-                    <span className={styles.scanDot} />
-                    Generating cards…
+                    <span className={streamDone ? styles.scanDotDone : styles.scanDot} />
+                    {streamDone
+                      ? `DONE — ${streamCards.length} CARDS GENERATED`
+                      : 'ANALYSING SOURCE MATERIAL…'}
                   </p>
                   <span className={styles.timer}>
                     {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}
                   </span>
                 </div>
-                <div className={styles.streamBody}>
-                  <pre className={styles.streamText}>
-                    {streamText || 'Waiting for Claude…'}
-                  </pre>
+                <div className={styles.streamCardsList}>
+                  {streamCards.map((card, i) => (
+                    <div key={card.id || i} className={styles.streamCard}>
+                      <div className={styles.card}>
+                        <p
+                          className={styles.cardTextContent}
+                          dangerouslySetInnerHTML={{
+                            __html: card.text.replace(/\{\{c1::(.*?)\}\}/g, '<strong>$1</strong>'),
+                          }}
+                        />
+                        {card.extra && (
+                          <p className={styles.cardExtra}>{card.extra}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
-                <p className={styles.streamNote}>
-                  Card generation usually takes 1–3 minutes depending on the length of the source material.
-                </p>
               </div>
             )}
           </>

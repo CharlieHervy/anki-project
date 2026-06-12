@@ -79,73 +79,84 @@ async def generate(
         except Exception as e:
             chunk_queue.put((ERROR_SENTINEL, str(e)))
 
-    async def event_stream():
-        full_tsv = ""
+async def event_stream():
+    full_tsv = ""
+    stream_buffer = ""
 
-        yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
+    yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
 
-        # Starta generatorn i en bakgrundstråd
-        thread = threading.Thread(target=run_generator, daemon=True)
-        thread.start()
+    thread = threading.Thread(target=run_generator, daemon=True)
+    thread.start()
 
-        try:
-            while True:
-                # Hämta nästa chunk utan att blockera event loop
-                try:
-                    item = await asyncio.get_event_loop().run_in_executor(
-                        None,
-                        lambda: chunk_queue.get(timeout=120)
-                    )
-                except queue.Empty:
-                    yield f"data: {json.dumps({'type': 'error', 'message': 'Timeout – ingen respons från Claude.'})}\n\n"
-                    return
-
-                if item is DONE_SENTINEL:
-                    break
-                elif isinstance(item, tuple) and item[0] is ERROR_SENTINEL:
-                    yield f"data: {json.dumps({'type': 'error', 'message': item[1]})}\n\n"
-                    return
-                else:
-                    full_tsv += item
-                    yield f"data: {json.dumps({'type': 'chunk', 'text': item})}\n\n"
-
-            if not full_tsv.strip():
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Claude returnerade ingen output.'})}\n\n"
-                return
-
-            cards = parse_tsv(full_tsv)
-
-            if not cards:
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Inga kort kunde parsas.'})}\n\n"
-                return
-
-            db2 = next(get_db())
+    try:
+        while True:
             try:
-                for i, card in enumerate(cards):
-                    db_card = CardModel(
-                        session_id=db_session.id,
-                        user_id=user_id,
-                        position=i,
-                        text=card.get('text', ''),
-                        extra=card.get('extra', ''),
-                        tags=card.get('tags', ''),
-                        deck=card.get('deck', 'Huvudmeny'),
-                        logg=card.get('logg', ''),
-                        approved=True
-                    )
-                    db2.add(db_card)
-                db2.commit()
-            except Exception as db_error:
-                db2.rollback()
-                yield f"data: {json.dumps({'type': 'error', 'message': f'Databasfel: {str(db_error)}'})}\n\n"
+                item = await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: chunk_queue.get(timeout=120)
+                )
+            except queue.Empty:
+                yield f"data: {json.dumps({'type': 'error', 'message': 'Timeout – ingen respons från Claude.'})}\n\n"
                 return
-            finally:
-                db2.close()
 
-            yield f"data: {json.dumps({'type': 'done', 'card_count': len(cards)})}\n\n"
+            if item is DONE_SENTINEL:
+                break
+            elif isinstance(item, tuple) and item[0] is ERROR_SENTINEL:
+                yield f"data: {json.dumps({'type': 'error', 'message': item[1]})}\n\n"
+                return
+            else:
+                full_tsv += item
+                stream_buffer += item
 
-        except asyncio.CancelledError:
-            pass
+                # Emittera card-events för varje komplett rad i buffern
+                while '\n' in stream_buffer:
+                    line, stream_buffer = stream_buffer.split('\n', 1)
+                    for card in parse_tsv(line):
+                        yield f"data: {json.dumps({'type': 'card', 'data': {'text': card['text'], 'extra': card['extra'], 'logg': card['logg']}})}\n\n"
+
+        # Hantera sista raden om Claude avslutar utan \n
+        if stream_buffer.strip():
+            for card in parse_tsv(stream_buffer):
+                yield f"data: {json.dumps({'type': 'card', 'data': {'text': card['text'], 'extra': card['extra'], 'logg': card['logg']}})}\n\n"
+
+        if not full_tsv.strip():
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Claude returnerade ingen output.'})}\n\n"
+            return
+
+        # DB-sparning använder full_tsv som förut — oförändrad logik
+        cards = parse_tsv(full_tsv)
+
+        if not cards:
+            yield f"data: {json.dumps({'type': 'error', 'message': 'Inga kort kunde parsas.'})}\n\n"
+            return
+
+        db2 = next(get_db())
+        try:
+            for i, card in enumerate(cards):
+                db_card = CardModel(
+                    session_id=db_session.id,
+                    user_id=user_id,
+                    position=i,
+                    text=card.get('text', ''),
+                    extra=card.get('extra', ''),
+                    tags=card.get('tags', ''),
+                    deck=card.get('deck', 'Huvudmeny'),
+                    logg=card.get('logg', ''),
+                    approved=True
+                )
+                db2.add(db_card)
+            db2.commit()
+        except Exception as db_error:
+            db2.rollback()
+            yield f"data: {json.dumps({'type': 'error', 'message': f'Databasfel: {str(db_error)}'})}\n\n"
+            return
+        finally:
+            db2.close()
+
+        yield f"data: {json.dumps({'type': 'done', 'card_count': len(cards)})}\n\n"
+
+    except asyncio.CancelledError:
+        pass
 
     return StreamingResponse(
         event_stream(),
