@@ -533,9 +533,15 @@ Kontextuell förstärkning (Sekundär källa - Wikipedia):
 
 def generate_cards_stream(source_material: str, language: str = "English"):
     """
-    Streamer kortgenerering från Claude API med Extended Thinking.
+    Streamer kortgenerering från Claude API med Extended Thinking och Prompt Caching.
+    Master Prompten cachas (statisk). Källmaterialet skickas i ett separat, ocachat block.
     """
-    system = MASTER_PROMPT.replace("[SOURCE_MATERIAL]", source_material).replace("[WIKIPEDIA_CONTENT]", "")
+    # Statisk del — cache-kandidaten. [SOURCE_MATERIAL]-platshållaren ersätts
+    # med en hänvisning så att Claude vet var materialet finns.
+    static_prompt = MASTER_PROMPT.replace(
+        "[SOURCE_MATERIAL]",
+        "[Källmaterialet tillhandahålls i nästa system-block nedan]"
+    ).replace("[WIKIPEDIA_CONTENT]", "")
 
     with client.beta.messages.stream(
         model=CLAUDE_MODEL,
@@ -544,7 +550,17 @@ def generate_cards_stream(source_material: str, language: str = "English"):
             "type": "enabled",
             "budget_tokens": 10000
         },
-        system=system,
+        system=[
+            {
+                "type": "text",
+                "text": static_prompt,
+                "cache_control": {"type": "ephemeral"}   # ← cachas
+            },
+            {
+                "type": "text",
+                "text": source_material                  # ← ej cachat, unikt per anrop
+            }
+        ],
         messages=[{
             "role": "user",
             "content": (
@@ -553,7 +569,7 @@ def generate_cards_stream(source_material: str, language: str = "English"):
                 "Omslut INTE outputen med kodblock eller backticks. Ingen hälsning, inget eftersnack."
             )
         }],
-        betas=["interleaved-thinking-2025-05-14"]
+        betas=["interleaved-thinking-2025-05-14", "prompt-caching-2024-07-31"]
     ) as stream:
         for event in stream:
             if hasattr(event, 'type'):
