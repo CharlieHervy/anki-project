@@ -2,11 +2,13 @@ import os
 import uuid
 import json
 import tempfile
+import stripe
 from dotenv import load_dotenv
+from supabase import create_client, Client
 
 load_dotenv()
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from sqlalchemy.orm import Session
@@ -16,7 +18,17 @@ from database import get_db, SessionModel, CardModel, DemoCard
 
 app = FastAPI()
 
-# 1. Standard-CORS för vanliga anrop
+# ── Supabase (service role — bypasses RLS) ──────────────────────────────────
+supabase: Client = create_client(
+    os.environ.get("SUPABASE_URL", ""),
+    os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+)
+
+# ── Stripe ───────────────────────────────────────────────────────────────────
+stripe.api_key = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+
+# ── CORS ─────────────────────────────────────────────────────────────────────
 ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "https://anki-project-three.vercel.app",
@@ -43,21 +55,79 @@ async def preflight_handler(request: Request, rest_of_path: str):
     response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, x-user-id, Accept, Origin"
     return response
 
-# 3. Den uppdaterade användarfunktionen med fallback för MVP
-def get_user_id(x_user_id: str = Header(None)):
-    if not x_user_id or x_user_id == "":
-        return "anonymous_user"
-    return x_user_id
 
+# ── Hjälpfunktioner för kvotsystemet ─────────────────────────────────────────
+
+def count_words(text: str) -> int:
+    return len(text.split())
+
+def validate_input_length(word_count: int, plan: str) -> tuple[bool, str]:
+    if plan == 'free' and word_count > 1000:
+        return False, f"Free plan supports up to 1,000 words. Your text has {word_count} words."
+    if word_count > 9000:
+        return False, f"Maximum input is 9,000 words. Your text has {word_count} words."
+    return True, ""
+
+def sse_error(message: str, **kwargs) -> StreamingResponse:
+    """Returnerar ett SSE-felmeddelande som StreamingResponse."""
+    payload = {"type": "error", "message": message, **kwargs}
+    return StreamingResponse(
+        iter([f"data: {json.dumps(payload)}\n\n"]),
+        media_type="text/event-stream"
+    )
+
+
+# ── /api/generate ─────────────────────────────────────────────────────────────
 
 @app.post("/api/generate")
 async def generate(
     source_material: str = Form(...),
     language: str = Form(default="English"),
-    user_id: str = Depends(get_user_id),
+    timezone: str = Form(default="UTC"),
+    x_user_id: str = Header(...),          # Kräver autentisering — ingen anonym fallback
     db: Session = Depends(get_db)
 ):
-    db_session = SessionModel(user_id=user_id)
+    word_count = count_words(source_material)
+
+    # 1. Hämta användarens plan för inputvalidering
+    try:
+        quota_response = supabase.rpc(
+            'get_quota_status',
+            {'p_user_id': x_user_id, 'p_timezone': timezone}
+        ).execute()
+        plan = quota_response.data.get('plan', 'free')
+    except Exception as e:
+        return sse_error(f"Quota check failed: {str(e)}")
+
+    # 2. Validera inputlängd mot plan
+    valid, error_msg = validate_input_length(word_count, plan)
+    if not valid:
+        return sse_error(error_msg)
+
+    # 3. Förbruka kvot via atomisk RPC (INNAN generering startar)
+    #    OBS: Om Claude-anropet senare misslyckas förlorar användaren
+    #    en generering. Rollback är inte implementerat i MVP.
+    try:
+        consume_response = supabase.rpc(
+            'consume_generation',
+            {
+                'p_user_id':   x_user_id,
+                'p_word_count': word_count,
+                'p_timezone':  timezone
+            }
+        ).execute()
+    except Exception as e:
+        return sse_error(f"Quota consumption failed: {str(e)}")
+
+    if not consume_response.data.get('success'):
+        return sse_error(
+            'quota_exceeded',
+            daily_remaining=consume_response.data.get('daily_remaining', 0),
+            quick_refill_remaining=consume_response.data.get('quick_refill_remaining', 0)
+        )
+
+    # 4. Skapa DB-session (efter kvotcheck — undviker tomma sessioner vid kvotfel)
+    db_session = SessionModel(user_id=x_user_id)
     db.add(db_session)
     db.commit()
     db.refresh(db_session)
@@ -79,7 +149,7 @@ async def generate(
         except Exception as e:
             chunk_queue.put((ERROR_SENTINEL, str(e)))
 
-    async def event_stream():                                          # ← indraget under generate()
+    async def event_stream():
         full_tsv = ""
         stream_buffer = ""
 
@@ -113,6 +183,7 @@ async def generate(
                         for card in parse_tsv(line):
                             yield f"data: {json.dumps({'type': 'card', 'data': {'text': card['text'], 'extra': card['extra'], 'logg': card['logg']}})}\n\n"
 
+            # Hantera sista raden om Claude avslutar utan \n
             if stream_buffer.strip():
                 for card in parse_tsv(stream_buffer):
                     yield f"data: {json.dumps({'type': 'card', 'data': {'text': card['text'], 'extra': card['extra'], 'logg': card['logg']}})}\n\n"
@@ -132,7 +203,7 @@ async def generate(
                 for i, card in enumerate(cards):
                     db_card = CardModel(
                         session_id=db_session.id,
-                        user_id=user_id,
+                        user_id=x_user_id,
                         position=i,
                         text=card.get('text', ''),
                         extra=card.get('extra', ''),
@@ -155,7 +226,7 @@ async def generate(
         except asyncio.CancelledError:
             pass
 
-    return StreamingResponse(                                          # ← tillbaka i generate(), efter event_stream-definitionen
+    return StreamingResponse(
         event_stream(),
         media_type="text/event-stream",
         headers={
@@ -164,6 +235,86 @@ async def generate(
         }
     )
 
+
+# ── /api/quota ────────────────────────────────────────────────────────────────
+
+@app.get("/api/quota")
+async def get_quota(
+    x_user_id: str = Header(...),
+    timezone: str = Query(default="UTC")
+):
+    """Returnerar kvotstatistik för inloggad användare."""
+    try:
+        result = supabase.rpc(
+            'get_quota_status',
+            {'p_user_id': x_user_id, 'p_timezone': timezone}
+        ).execute()
+        return result.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Quota fetch failed: {str(e)}")
+
+
+# ── /api/stripe/webhook ───────────────────────────────────────────────────────
+
+@app.post("/api/stripe/webhook")
+async def stripe_webhook(request: Request):
+    """
+    Hanterar Stripe-events.
+    checkout.session.completed → Quick Refill eller Pro-aktivering
+    customer.subscription.deleted → Nedgradering till free
+    """
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+
+    # Verifiera signatur — returnerar 400 vid manipulerat payload
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, STRIPE_WEBHOOK_SECRET
+        )
+    except stripe.error.SignatureVerificationError:
+        raise HTTPException(status_code=400, detail="Invalid Stripe signature")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Webhook error: {str(e)}")
+
+    if event.type == 'checkout.session.completed':
+        session = event.data.object
+        user_id = session.metadata.get('user_id')
+        product_type = session.metadata.get('product_type')
+
+        if not user_id or not product_type:
+            # Saknad metadata — logga men returnera 200 så Stripe inte retryar
+            return {"status": "ignored", "reason": "missing metadata"}
+
+        if product_type == 'quick_refill':
+            supabase.rpc('add_quick_refill', {'p_user_id': user_id}).execute()
+
+        elif product_type == 'pro':
+            supabase.table('user_quotas').upsert({
+                'user_id': user_id,
+                'plan': 'pro',
+                'daily_generations_limit': 3
+            }).execute()
+
+    elif event.type == 'customer.subscription.deleted':
+        # OBS: subscription-objektet har inte alltid metadata med user_id.
+        # Kontrollera att Stripe-prenumerationer skapas med user_id i metadata.
+        user_id = event.data.object.metadata.get('user_id') if event.data.object.metadata else None
+
+        if user_id:
+            supabase.table('user_quotas').update({
+                'plan': 'free',
+                'daily_generations_limit': 1
+            }).eq('user_id', user_id).execute()
+
+    return {"status": "ok"}
+
+
+# ── /api/upload ───────────────────────────────────────────────────────────────
+
+def get_user_id(x_user_id: str = Header(None)):
+    if not x_user_id or x_user_id == "":
+        return "anonymous_user"
+    return x_user_id
 
 @app.post("/api/upload")
 async def upload_file(
@@ -204,6 +355,8 @@ async def upload_file(
         )
 
 
+# ── /api/cards/{session_id} ───────────────────────────────────────────────────
+
 @app.get("/api/cards/{session_id}")
 async def get_cards(
     session_id: str,
@@ -229,6 +382,8 @@ async def get_cards(
         for c in cards
     ]}
 
+
+# ── /api/cards/{session_id}/{card_id}/content ─────────────────────────────────
 
 @app.patch("/api/cards/{session_id}/{card_id}/content")
 async def update_card_content(
@@ -257,15 +412,8 @@ async def update_card_content(
     db.commit()
     return {"ok": True}
 
-    if not card:
-        raise HTTPException(status_code=404, detail="Kort hittades inte")
 
-    if "approved" in body:
-        card.approved = body["approved"]
-        db.commit()
-
-    return {"ok": True}
-
+# ── /api/export/{session_id} ──────────────────────────────────────────────────
 
 @app.post("/api/export/{session_id}")
 async def export(
@@ -305,10 +453,14 @@ async def export(
     )
 
 
+# ── /api/health ───────────────────────────────────────────────────────────────
+
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
 
+
+# ── /api/demo/cards ───────────────────────────────────────────────────────────
 
 VALID_DEMO_SUBJECTS = {"biology", "history", "chemistry", "medicine"}
 
