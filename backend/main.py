@@ -152,6 +152,7 @@ async def generate(
     async def event_stream():
         full_tsv = ""
         stream_buffer = ""
+        title_saved = False
 
         yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
 
@@ -180,6 +181,21 @@ async def generate(
 
                     while '\n' in stream_buffer:
                         line, stream_buffer = stream_buffer.split('\n', 1)
+                        stripped_line = line.strip()
+                        if not title_saved and stripped_line.startswith('TITLE:'):
+                            title_saved = True
+                            extracted_title = stripped_line[len('TITLE:'):].strip()
+                            db_title = next(get_db())
+                            try:
+                                db_title.query(SessionModel).filter(
+                                    SessionModel.id == db_session.id
+                                ).update({'title': extracted_title})
+                                db_title.commit()
+                            except Exception:
+                                db_title.rollback()
+                            finally:
+                                db_title.close()
+                            continue  # TITLE-raden når aldrig parse_tsv
                         for card in parse_tsv(line):
                             yield f"data: {json.dumps({'type': 'card', 'data': {'text': card['text'], 'extra': card['extra'], 'logg': card['logg']}})}\n\n"
 
@@ -376,6 +392,34 @@ async def create_checkout(
         raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
 
     return {"url": session.url}
+
+
+
+# ── /api/sessions ─────────────────────────────────────────────────────────────
+
+@app.get("/api/sessions")
+async def get_sessions(
+    x_user_id: str = Header(...),
+    db: Session = Depends(get_db)
+):
+    """Returnerar alla sessioner för inloggad användare, senaste först."""
+    sessions = db.query(SessionModel)\
+        .filter(SessionModel.user_id == x_user_id)\
+        .order_by(SessionModel.created_at.desc())\
+        .all()
+
+    result = []
+    for s in sessions:
+        card_count = db.query(CardModel)\
+            .filter(CardModel.session_id == s.id)\
+            .count()
+        result.append({
+            "session_id": str(s.id),
+            "title": s.title or "Untitled session",
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "card_count": card_count
+        })
+    return result
 
 
 # ── /api/upload ───────────────────────────────────────────────────────────────

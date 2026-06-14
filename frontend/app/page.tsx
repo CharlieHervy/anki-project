@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import { UserButton, useUser, useClerk } from '@clerk/nextjs'
 import styles from './page.module.css'
 
@@ -68,6 +69,25 @@ export default function Home() {
       // Quota refreshes automatically via quota-fetch useEffect when state === 'upload'
     }
   }, [])
+
+  // Load a previous session from ?session_id= URL param (e.g. from /history)
+  useEffect(() => {
+    if (!isLoaded || !user) return
+    const params = new URLSearchParams(window.location.search)
+    const sid = params.get('session_id')
+    if (!sid) return
+    window.history.replaceState({}, '', '/')
+    fetch(`${API}/api/cards/${sid}`, {
+      headers: { 'x-user-id': user.id },
+    })
+      .then(r => r.json())
+      .then(data => {
+        setCards(data.cards ?? [])
+        setSessionId(sid)
+        setState('review')
+      })
+      .catch(() => {}) // silently ignore — user stays on upload view
+  }, [user, isLoaded])
 
   // Fetch quota when user lands on or returns to upload view
   useEffect(() => {
@@ -316,6 +336,11 @@ export default function Home() {
       {/* ── Topbar ── */}
       <header className={styles.topbar}>
         <span className={styles.wordmark}>Dimindo</span>
+        {user && (
+          <Link href="/history" className={styles.topbarLink}>
+            Previous generations
+          </Link>
+        )}
         <UserButton />
       </header>
 

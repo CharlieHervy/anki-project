@@ -34,6 +34,17 @@
   color: var(--ink);
 }
 
+/* Discrete nav link — "Previous generations" → /history */
+.topbarLink {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.15s;
+  margin-right: 4px;
+}
+.topbarLink:hover { color: var(--ink); }
+
 /* ─────────────────────────────────────────────
    Content block
 ───────────────────────────────────────────── */
@@ -160,6 +171,15 @@
   border-radius: 4px;
   padding: 16px 20px;
   margin-bottom: 24px;
+}
+
+/* Payment success confirmation */
+.paymentSuccess {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  color: var(--gold);
+  margin-bottom: 16px;
 }
 
 .quotaErrorTitle {
