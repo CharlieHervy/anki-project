@@ -278,15 +278,26 @@ async def stripe_webhook(request: Request):
 
     def safe_metadata(obj) -> dict:
         """
-        Extraherar metadata från ett Stripe-objekt utan dict()-konvertering.
-        StripeObject stödjer .get() direkt — metadata-fältet returneras som
-        ett nytt StripeObject vars nycklar är strängar och vars värden är str.
+        Extraherar metadata från ett Stripe-objekt utan antaganden om
+        StripeObject-implementationen. getattr undviker AttributeError
+        oavsett SDK-version. .items() är tillförlitligare än dict() eller
+        nyckeliteration för att materialisera ett StripeObject till en dict.
         """
-        raw = obj.get("metadata") if obj else None
+        if not obj:
+            return {}
+        raw = getattr(obj, "metadata", None)
         if not raw:
             return {}
-        # StripeObject är itererbart över nycklar (strängar) precis som en dict
-        return {k: raw[k] for k in raw}
+        try:
+            return dict(raw.items())
+        except Exception:
+            # Sista fallback: direkt attributåtkomst per känd nyckel
+            result = {}
+            for k in ("user_id", "product_type"):
+                v = getattr(raw, k, None)
+                if v is not None:
+                    result[k] = v
+            return result
 
     if event.type == 'checkout.session.completed':
         session = event.data.object
