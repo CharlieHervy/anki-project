@@ -43,6 +43,9 @@ def create_anki_model() -> genanki.Model:
   max-width: 640px;
   margin: 0 auto;
   padding: 40px 28px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
 }
 
 /* ── Cloze-lucka (framsidan) och cloze-svar (baksidan) ─────── */
@@ -83,8 +86,8 @@ def create_anki_model() -> genanki.Model:
   --paper: #1c1b18;
   --rule:  #3c3b38;
   --muted: #7a7870;
-  color: var(--ink);
-  background-color: var(--paper);
+  background-color: var(--paper) !important;
+  color: var(--ink) !important;
 }
 
 /* gold behålls oförändrad — fungerar på mörk bakgrund */
