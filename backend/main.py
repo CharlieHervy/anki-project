@@ -309,6 +309,52 @@ async def stripe_webhook(request: Request):
     return {"status": "ok"}
 
 
+# ── /api/stripe/create-checkout ──────────────────────────────────────────────
+
+@app.post("/api/stripe/create-checkout")
+async def create_checkout(
+    product_type: str = Form(...),
+    x_user_id: str = Header(...)
+):
+    """
+    Skapar en Stripe Checkout-session och returnerar redirect-URL.
+    MVP: inline price_data skapar en ny Stripe-produkt per session.
+    Framtida förbättring: ersätt med fasta price_id från Stripe Dashboard.
+    """
+    if product_type not in ('pro', 'quick_refill'):
+        raise HTTPException(status_code=400, detail="Invalid product type")
+
+    if product_type == 'quick_refill':
+        price_data = {
+            "currency": "sek",
+            "unit_amount": 2900,  # 29 kr i ören
+            "product_data": {"name": "Dimindo Quick Refill — 5 generations"},
+        }
+        mode = "payment"
+    else:
+        price_data = {
+            "currency": "sek",
+            "unit_amount": 9900,  # 99 kr i ören
+            "recurring": {"interval": "month"},
+            "product_data": {"name": "Dimindo Pro"},
+        }
+        mode = "subscription"
+
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{"price_data": price_data, "quantity": 1}],
+            mode=mode,
+            success_url="https://dimindo.com?payment=success&product=" + product_type,
+            cancel_url="https://dimindo.com",
+            metadata={"user_id": x_user_id, "product_type": product_type},
+        )
+    except stripe.error.StripeError as e:
+        raise HTTPException(status_code=500, detail=f"Stripe error: {str(e)}")
+
+    return {"url": session.url}
+
+
 # ── /api/upload ───────────────────────────────────────────────────────────────
 
 def get_user_id(x_user_id: str = Header(None)):

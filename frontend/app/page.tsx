@@ -46,6 +46,7 @@ export default function Home() {
     plan: string
   } | null>(null)
   const [quotaExceeded, setQuotaExceeded] = useState(false)
+  const [paymentSuccess, setPaymentSuccess] = useState(false)
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   // Restore source text after sign-in redirect
@@ -57,6 +58,16 @@ export default function Home() {
       sessionStorage.removeItem('dimindo_source_text')
     }
   }, [user, isLoaded])
+
+  // Handle return from Stripe Checkout
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('payment') === 'success') {
+      window.history.replaceState({}, '', '/')
+      setPaymentSuccess(true)
+      // Quota refreshes automatically via quota-fetch useEffect when state === 'upload'
+    }
+  }, [])
 
   // Fetch quota when user lands on or returns to upload view
   useEffect(() => {
@@ -240,6 +251,24 @@ export default function Home() {
     setState('done')
   }
 
+  // Stripe Checkout
+  async function handleCheckout(productType: 'pro' | 'quick_refill') {
+    if (sourceText.trim()) {
+      sessionStorage.setItem('dimindo_source_text', sourceText)
+    }
+    const formData = new FormData()
+    formData.append('product_type', productType)
+    const res = await fetch(`${API}/api/stripe/create-checkout`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: formData,
+    })
+    const data = await res.json()
+    if (data.url) {
+      window.location.href = data.url
+    }
+  }
+
   // Reset to blank upload state
   function handleNewDeck() {
     setState('upload')
@@ -297,6 +326,13 @@ export default function Home() {
         ══════════════════════════════════ */}
         {(state === 'upload' || state === 'generating') && (
           <>
+            {/* Payment success confirmation */}
+            {paymentSuccess && (
+              <p className={styles.paymentSuccess}>
+                ✓ Payment successful. Your plan has been updated.
+              </p>
+            )}
+
             {/* Quota exceeded — inline block, separate from generic errors */}
             {quotaExceeded && (
               <div className={styles.quotaError}>
@@ -307,8 +343,12 @@ export default function Home() {
                   Next reset: tonight at midnight.
                 </p>
                 <div className={styles.quotaErrorActions}>
-                  <a href="#" className={styles.btnPrimary}>Upgrade to Pro →</a>
-                  <a href="#" className={styles.btnSecondary}>Buy a Quick Refill →</a>
+                  <button onClick={() => handleCheckout('pro')} className={styles.btnPrimary}>
+                    Upgrade to Pro →
+                  </button>
+                  <button onClick={() => handleCheckout('quick_refill')} className={styles.btnSecondary}>
+                    Buy a Quick Refill →
+                  </button>
                 </div>
               </div>
             )}
