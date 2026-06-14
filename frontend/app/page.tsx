@@ -40,6 +40,13 @@ export default function Home() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [language, setLanguage] = useState('English')
+  const [quota, setQuota] = useState<{
+    daily_remaining: number
+    quick_refill_remaining: number
+    plan: string
+  } | null>(null)
+  const [quotaExceeded, setQuotaExceeded] = useState(false)
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   // Restore source text after sign-in redirect
   useEffect(() => {
@@ -50,6 +57,18 @@ export default function Home() {
       sessionStorage.removeItem('dimindo_source_text')
     }
   }, [user, isLoaded])
+
+  // Fetch quota when user lands on or returns to upload view
+  useEffect(() => {
+    if (!user || !isLoaded) return
+    if (state !== 'upload') return
+    fetch(`${API}/api/quota?timezone=${encodeURIComponent(timezone)}`, {
+      headers: { 'x-user-id': user.id },
+    })
+      .then(r => r.json())
+      .then(data => setQuota(data))
+      .catch(() => {}) // non-critical — silently ignore
+  }, [user, isLoaded, state, timezone])
 
   // --- File Upload ---
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -77,12 +96,14 @@ export default function Home() {
     setState('generating')
     setStreamCards([])
     setStreamDone(false)
+    setQuotaExceeded(false)
     setError('')
     startTimer()
 
     const formData = new FormData()
     formData.append('source_material', sourceText)
     formData.append('language', language)
+    formData.append('timezone', timezone)
 
     try {
       const res = await fetch(`${API}/api/generate`, {
@@ -123,7 +144,11 @@ export default function Home() {
               setTimeout(() => setState('review'), 800)
             } else if (event.type === 'error') {
               stopTimer()
-              setError(event.message)
+              if (event.message === 'quota_exceeded') {
+                setQuotaExceeded(true)
+              } else {
+                setError(event.message)
+              }
               setState('upload')
             }
           } catch (err) {
@@ -221,7 +246,36 @@ export default function Home() {
     setSourceText('')
     setCards([])
     setStreamCards([])
+    setQuotaExceeded(false)
     setSessionId('')
+  }
+
+  // Word count helpers
+  const wordCount = sourceText.trim() === ''
+    ? 0
+    : sourceText.trim().split(/\s+/).filter(Boolean).length
+  const wordLimit = quota?.plan === 'pro' ? 9000 : 1000
+  const wordLimitExceeded = !!user && !!quota && wordCount > wordLimit
+
+  function wordCountColor(): string {
+    const pct = wordCount / wordLimit
+    if (pct > 1) return '#b04a2a'
+    if (pct >= 0.9) return 'var(--gold)'
+    return 'var(--muted)'
+  }
+
+  function wordCountDisplay(): string | null {
+    if (!user || !quota || wordCount === 0) return null
+    if (quota.plan !== 'pro') {
+      return `${wordCount.toLocaleString()} / 1,000 words`
+    }
+    if (wordCount <= 3000) {
+      return `${wordCount.toLocaleString()} / 3,000 words · 1 generation`
+    }
+    if (wordCount <= 6000) {
+      return `${wordCount.toLocaleString()} words · 2 generations`
+    }
+    return `${wordCount.toLocaleString()} words · 3 generations`
   }
 
   const approvedCount = cards.filter(c => c.approved).length
@@ -243,6 +297,22 @@ export default function Home() {
         ══════════════════════════════════ */}
         {(state === 'upload' || state === 'generating') && (
           <>
+            {/* Quota exceeded — inline block, separate from generic errors */}
+            {quotaExceeded && (
+              <div className={styles.quotaError}>
+                <p className={styles.quotaErrorTitle}>
+                  You've used all your generations for today.
+                </p>
+                <p className={styles.quotaErrorSub}>
+                  Next reset: tonight at midnight.
+                </p>
+                <div className={styles.quotaErrorActions}>
+                  <a href="#" className={styles.btnPrimary}>Upgrade to Pro →</a>
+                  <a href="#" className={styles.btnSecondary}>Buy a Quick Refill →</a>
+                </div>
+              </div>
+            )}
+
             {error && (
               <div className={styles.error}>
                 <span className={styles.errorIcon}>⚠</span>
@@ -257,6 +327,13 @@ export default function Home() {
             )}
 
             <p className={styles.eyebrow}>New deck</p>
+
+            {user && quota && state === 'upload' && (
+              <p className={styles.quotaIndicator}>
+                {quota.daily_remaining} generation{quota.daily_remaining !== 1 ? 's' : ''} remaining today · {quota.quick_refill_remaining} Quick Refill
+              </p>
+            )}
+
             <h1 className={styles.heading}>Upload your source material</h1>
 
             <textarea
@@ -267,6 +344,15 @@ export default function Home() {
               disabled={state === 'generating'}
               autoFocus
             />
+
+            {state === 'upload' && user && quota && wordCountDisplay() && (
+              <p
+                className={styles.wordCounter}
+                style={{ color: wordCountColor() }}
+              >
+                {wordCountDisplay()}
+              </p>
+            )}
 
             {state === 'upload' && (
               <div className={styles.settingsRow}>
@@ -301,7 +387,7 @@ export default function Home() {
               />
               <button
                 onClick={handleGenerate}
-                disabled={!sourceText.trim() || state === 'generating'}
+                disabled={!sourceText.trim() || state === 'generating' || wordLimitExceeded}
                 className={styles.btnPrimary}
               >
                 {state === 'generating' ? 'Generating…' : 'Generate cards →'}
