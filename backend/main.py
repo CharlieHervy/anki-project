@@ -278,8 +278,9 @@ async def stripe_webhook(request: Request):
 
     if event.type == 'checkout.session.completed':
         session = event.data.object
-        user_id = session.metadata.get('user_id')
-        product_type = session.metadata.get('product_type')
+        metadata = dict(session.metadata) if session.metadata else {}
+        user_id = metadata.get('user_id')
+        product_type = metadata.get('product_type')
 
         if not user_id or not product_type:
             # Saknad metadata — logga men returnera 200 så Stripe inte retryar
@@ -298,7 +299,8 @@ async def stripe_webhook(request: Request):
     elif event.type == 'customer.subscription.deleted':
         # OBS: subscription-objektet har inte alltid metadata med user_id.
         # Kontrollera att Stripe-prenumerationer skapas med user_id i metadata.
-        user_id = event.data.object.metadata.get('user_id') if event.data.object.metadata else None
+        sub_metadata = dict(event.data.object.metadata) if event.data.object.metadata else {}
+        user_id = sub_metadata.get('user_id')
 
         if user_id:
             supabase.table('user_quotas').update({
