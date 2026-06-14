@@ -1,98 +1,128 @@
 import genanki
 import random
-import tempfile
-import os
 
-def generate_model_id():
-    """Genererar ett stabilt modell-ID baserat på kortmallens namn."""
+def generate_model_id() -> int:
+    """
+    Stabilt modell-ID — ändra aldrig detta värde utan att återskapa
+    alla befintliga kortlekar, annars uppstår duplicerade modeller i Anki.
+    """
     return 1607392319
 
-def create_anki_model():
-    """Skapar Anki-kortmallen (Cloze_Auto)."""
+
+def create_anki_model() -> genanki.Model:
+    """
+    Skapar Anki-kortmallen med Dimindo-designsystemet.
+    - Korttext: DM Serif Display
+    - Extra-fält: DM Sans, separerat med --rule-linje
+    - Cloze-svar (baksidan): --gold, fetstil
+    - Logg-fältet: finns i fields-listan men renderas aldrig i kortmallen
+    - Nattläge: inverterade men varumärkestrogna färger
+    """
+
+    css = """
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+
+/* ── CSS-variabler (ljusläge) ──────────────────────────────── */
+:root {
+  --ink:    #0d0d0d;
+  --paper:  #f7f5f0;
+  --cream:  #ede9e1;
+  --rule:   #d8d3c8;
+  --muted:  #8a8478;
+  --gold:   #c9a84c;
+}
+
+/* ── Grundkort ─────────────────────────────────────────────── */
+.card {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  text-align: center;
+  color: var(--ink);
+  background-color: var(--paper);
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 40px 28px;
+}
+
+/* ── Cloze-lucka (framsidan) och cloze-svar (baksidan) ─────── */
+.cloze {
+  font-weight: bold;
+  color: var(--gold);
+}
+
+/* ── Extra-fält ────────────────────────────────────────────── */
+.extra-divider {
+  width: 50%;
+  margin: 22px auto 16px auto;
+  border: none;
+  border-top: 1px solid var(--rule);
+}
+
+.extra-text {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 300;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+/* ── Bild ──────────────────────────────────────────────────── */
+.bild-container {
+  margin-top: 20px;
+}
+
+.bild-container img {
+  max-width: 100%;
+  border-radius: 4px;
+}
+
+/* ── Nattläge ──────────────────────────────────────────────── */
+.nightMode .card {
+  --ink:   #e4e0d8;
+  --paper: #1c1b18;
+  --rule:  #3c3b38;
+  --muted: #7a7870;
+  color: var(--ink);
+  background-color: var(--paper);
+}
+
+/* gold behålls oförändrad — fungerar på mörk bakgrund */
+.nightMode .cloze {
+  color: var(--gold);
+}
+"""
+
+    qfmt = "{{cloze:Text}}"
+
+    afmt = """{{cloze:Text}}
+
+{{#Back Extra}}
+<div class="extra-divider"></div>
+<div class="extra-text">{{Back Extra}}</div>
+{{/Back Extra}}
+
+{{#Bild}}
+<div class="bild-container">{{Bild}}</div>
+{{/Bild}}"""
+
     return genanki.Model(
         generate_model_id(),
         'Cloze_Auto',
         fields=[
             {'name': 'Text'},
             {'name': 'Back Extra'},
-            {'name': 'Logg'},
+            {'name': 'Logg'},   # Fältet finns för dataintegritet men renderas ej i mallen
             {'name': 'Bild'},
         ],
         templates=[
             {
                 'name': 'Cloze_Auto',
-                'qfmt': '{{cloze:Text}}',
-                'afmt': '''{{cloze:Text}}
-<div class="extra-divider"></div>
-<div class="extra-text">{{Back Extra}}</div>
-
-{{#Logg}}
-<div class="ghost-note">
-  <span class="ghost-trigger">ⓘ Info</span>
-  <div class="ghost-content">{{Logg}}</div>
-</div>
-{{/Logg}}
-
-{{#Bild}}
-<div style="margin-top: 20px;">
-  {{Bild}}
-</div>
-{{/Bild}}''',
+                'qfmt': qfmt,
+                'afmt': afmt,
             }
         ],
-        css='''.card {
-  font-family: arial;
-  font-size: 20px;
-  line-height: 1.5;
-  text-align: center;
-  color: black;
-  background-color: white;
-}
-.cloze {
-  font-weight: bold;
-  color: blue;
-}
-.nightMode .cloze {
-  color: lightblue;
-}
-.extra-divider {
-  width: 60%;
-  margin: 20px auto 15px auto;
-  border-top: 1px solid #cccccc;
-}
-.extra-text {
-  font-size: 0.85em;
-  color: #888888;
-  line-height: 1.5;
-}
-.ghost-note {
-  margin-top: 15px;
-  margin-bottom: 15px;
-  font-size: 0.8em;
-  color: #888;
-  text-align: center;
-}
-.ghost-content {
-  display: none;
-  background: #f9f9f9;
-  border-radius: 5px;
-  padding: 10px;
-  margin-top: 5px;
-}
-.ghost-note:hover .ghost-content,
-.ghost-note:active .ghost-content {
-  display: block;
-  color: #444;
-}
-.ghost-trigger {
-  cursor: help;
-  border-bottom: 1px dotted #888;
-}
-.nightMode .ghost-content {
-  background: #2a2a2a;
-  color: #ccc;
-  border: 1px solid #444;
-}''',
+        css=css,
         model_type=genanki.Model.CLOZE
     )
 
@@ -100,12 +130,11 @@ def create_anki_model():
 def export_to_apkg(cards: list[dict], output_path: str) -> str:
     """
     Tar en lista av godkända kort och exporterar till .apkg-fil.
-    Returnerar sökvägen till den skapade filen.
+    Grupperar kort per kortlek (deck-fältet). Returnerar output_path.
     """
     model = create_anki_model()
 
-    # Gruppera kort per kortlek
-    decks_dict = {}
+    decks_dict: dict[str, genanki.Deck] = {}
     for card in cards:
         deck_name = card.get('deck', 'Huvudmeny')
         if deck_name not in decks_dict:
@@ -117,14 +146,13 @@ def export_to_apkg(cards: list[dict], output_path: str) -> str:
             fields=[
                 card.get('text', ''),
                 card.get('extra', ''),
-                card.get('logg', ''),
+                card.get('logg', ''),   # Skickas till Logg-fältet men renderas ej
                 card.get('bild', ''),
             ],
             tags=[card.get('tags', '')] if card.get('tags') else []
         )
         decks_dict[deck_name].add_note(note)
 
-    # Bygg paketet med alla kortlekar
     package = genanki.Package(list(decks_dict.values()))
     package.write_to_file(output_path)
 
