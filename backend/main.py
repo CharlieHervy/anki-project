@@ -2,7 +2,10 @@ import os
 import uuid
 import json
 import tempfile
+import logging
 import stripe
+
+logging.basicConfig(level=logging.INFO)
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -182,6 +185,7 @@ async def generate(
                     while '\n' in stream_buffer:
                         line, stream_buffer = stream_buffer.split('\n', 1)
                         stripped_line = line.strip()
+                        logging.info(f"RAW LINE: {repr(stripped_line[:100])}")
                         if not title_saved and stripped_line.startswith('TITLE:'):
                             title_saved = True
                             extracted_title = stripped_line[len('TITLE:'):].strip()
