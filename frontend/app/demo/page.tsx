@@ -126,7 +126,7 @@ export default function DemoPage() {
     timerRefs.current.forEach(t => clearTimeout(t))
     timerRefs.current = []
 
-    document.cookie = 'dimindo_demo_seen=1; path=/; max-age=31536000'
+    localStorage.setItem('dimindo_demo_seen', '1')
     setSubject(s)
     setVisibleCards([])
     setHighlightedPhrases([])
@@ -648,7 +648,11 @@ export default function DemoPage() {
         <header className="demo-topbar">
           <a href="https://dimindo.com" className="demo-wordmark">Dimindo</a>
           <span className="demo-badge">Live demo</span>
-          <a href="https://dimindo.com" className="demo-skip-top">
+          <a
+            href="https://dimindo.com"
+            className="demo-skip-top"
+            onClick={() => localStorage.setItem('dimindo_demo_seen', '1')}
+          >
             Skip demo — upload your own material →
           </a>
         </header>
@@ -690,7 +694,11 @@ export default function DemoPage() {
 
             <div className="demo-or-divider">or</div>
 
-            <a href="https://dimindo.com" className="demo-skip-full">
+            <a
+              href="https://dimindo.com"
+              className="demo-skip-full"
+              onClick={() => localStorage.setItem('dimindo_demo_seen', '1')}
+            >
               Skip demo — upload your own material →
             </a>
           </section>
