@@ -391,6 +391,44 @@
 }
 .reviewBack:hover { color: var(--ink); }
 
+/* Source material toggle */
+.sourceToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 16px;
+  transition: color 0.15s;
+}
+.sourceToggle:hover { color: var(--ink); }
+
+/* Source material panel */
+.sourcePanel {
+  max-height: 300px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+
+.sourceText {
+  font-size: 0.875rem;
+  line-height: 1.7;
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-weight: 300;
+}
+
 .reviewHeader {
   display: flex;
   align-items: flex-end;

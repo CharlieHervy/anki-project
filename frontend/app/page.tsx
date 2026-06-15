@@ -48,6 +48,8 @@ export default function Home() {
   } | null>(null)
   const [quotaExceeded, setQuotaExceeded] = useState(false)
   const [paymentSuccess, setPaymentSuccess] = useState(false)
+  const [sourceMaterial, setSourceMaterial] = useState<string | null>(null)
+  const [showSource, setShowSource] = useState(false)
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
   // Restore source text after sign-in redirect
@@ -85,6 +87,13 @@ export default function Home() {
         setCards(data.cards ?? [])
         setSessionId(sid)
         setState('review')
+        // Fetch source material for the review toggle
+        fetch(`${API}/api/sessions/${sid}/source`, {
+          headers: { 'x-user-id': user.id },
+        })
+          .then(r => r.json())
+          .then(src => setSourceMaterial(src.source_material ?? null))
+          .catch(() => {})
       })
       .catch(() => {}) // silently ignore — user stays on upload view
   }, [user, isLoaded])
@@ -172,6 +181,13 @@ export default function Home() {
               })
               const cardsData = await cardsRes.json()
               setCards(cardsData.cards)
+              // Fetch source material for the review toggle
+              fetch(`${API}/api/sessions/${currentSessionId}/source`, {
+                headers: authHeaders,
+              })
+                .then(r => r.json())
+                .then(data => setSourceMaterial(data.source_material ?? null))
+                .catch(() => {})
               setTimeout(() => setState('review'), 800)
             } else if (event.type === 'error') {
               stopTimer()
@@ -296,6 +312,8 @@ export default function Home() {
     setCards([])
     setStreamCards([])
     setQuotaExceeded(false)
+    setSourceMaterial(null)
+    setShowSource(false)
     setSessionId('')
   }
 
@@ -519,6 +537,21 @@ export default function Home() {
                 Export {approvedCount} cards as .apkg →
               </button>
             </div>
+
+            {sourceMaterial && (
+              <button
+                className={styles.sourceToggle}
+                onClick={() => setShowSource(prev => !prev)}
+              >
+                {showSource ? 'Hide source material ↑' : 'Show source material ↓'}
+              </button>
+            )}
+
+            {sourceMaterial && showSource && (
+              <div className={styles.sourcePanel}>
+                <p className={styles.sourceText}>{sourceMaterial}</p>
+              </div>
+            )}
 
             <div className={styles.cardsList}>
               {cards.map((card, i) => (
