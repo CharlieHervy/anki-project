@@ -2,10 +2,7 @@ import os
 import uuid
 import json
 import tempfile
-import logging
 import stripe
-
-logging.basicConfig(level=logging.INFO)
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -130,7 +127,7 @@ async def generate(
         )
 
     # 4. Skapa DB-session (efter kvotcheck — undviker tomma sessioner vid kvotfel)
-    db_session = SessionModel(user_id=x_user_id)
+    db_session = SessionModel(user_id=x_user_id, source_material=source_material)
     db.add(db_session)
     db.commit()
     db.refresh(db_session)
@@ -185,7 +182,6 @@ async def generate(
                     while '\n' in stream_buffer:
                         line, stream_buffer = stream_buffer.split('\n', 1)
                         stripped_line = line.strip()
-                        logging.info(f"RAW LINE: {repr(stripped_line[:100])}")
                         if not title_saved and stripped_line.startswith('TITLE:'):
                             title_saved = True
                             extracted_title = stripped_line[len('TITLE:'):].strip()
@@ -424,6 +420,25 @@ async def get_sessions(
             "card_count": card_count
         })
     return result
+
+
+
+# ── /api/sessions/{session_id}/source ────────────────────────────────────────
+
+@app.get("/api/sessions/{session_id}/source")
+async def get_session_source(
+    session_id: str,
+    x_user_id: str = Header(...),
+    db: Session = Depends(get_db)
+):
+    """Returnerar källmaterialet för en specifik session."""
+    session = db.query(SessionModel).filter(
+        SessionModel.id == session_id,
+        SessionModel.user_id == x_user_id
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    return {"source_material": session.source_material or ""}
 
 
 # ── /api/upload ───────────────────────────────────────────────────────────────
