@@ -101,7 +101,7 @@ def create_anki_model() -> genanki.Model:
 
     return genanki.Model(
         generate_model_id(),
-        'Cloze_Auto',
+        'Dimindo_Cloze',
         fields=[
             {'name': 'Text'},
             {'name': 'Back Extra'},
@@ -110,7 +110,7 @@ def create_anki_model() -> genanki.Model:
         ],
         templates=[
             {
-                'name': 'Cloze_Auto',
+                'name': 'Dimindo_Cloze',
                 'qfmt': qfmt,
                 'afmt': afmt,
             }
