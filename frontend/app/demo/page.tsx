@@ -126,7 +126,8 @@ export default function DemoPage() {
     timerRefs.current.forEach(t => clearTimeout(t))
     timerRefs.current = []
 
-    localStorage.setItem('dimindo_demo_seen', '1')
+    // Uppdaterat från localStorage till cookie för middleware-synk
+    document.cookie = 'dimindo_demo_seen=1; path=/; max-age=31536000'
     setSubject(s)
     setVisibleCards([])
     setHighlightedPhrases([])
@@ -651,7 +652,7 @@ export default function DemoPage() {
           <a
             href="https://dimindo.com"
             className="demo-skip-top"
-            onClick={() => localStorage.setItem('dimindo_demo_seen', '1')}
+            onClick={() => { document.cookie = 'dimindo_demo_seen=1; path=/; max-age=31536000' }}
           >
             Skip demo — upload your own material →
           </a>
@@ -697,7 +698,7 @@ export default function DemoPage() {
             <a
               href="https://dimindo.com"
               className="demo-skip-full"
-              onClick={() => localStorage.setItem('dimindo_demo_seen', '1')}
+              onClick={() => { document.cookie = 'dimindo_demo_seen=1; path=/; max-age=31536000' }}
             >
               Skip demo — upload your own material →
             </a>
