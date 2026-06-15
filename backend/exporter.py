@@ -1,6 +1,7 @@
 import genanki
 import random
 
+
 def generate_model_id() -> int:
     """
     Stabilt modell-ID — ändra aldrig detta värde utan att återskapa
@@ -12,102 +13,91 @@ def generate_model_id() -> int:
 def create_anki_model() -> genanki.Model:
     """
     Skapar Anki-kortmallen med Dimindo-designsystemet.
-    - Korttext: DM Serif Display
-    - Extra-fält: DM Sans, separerat med --rule-linje
-    - Cloze-svar (baksidan): --gold, fetstil
-    - Logg-fältet: finns i fields-listan men renderas aldrig i kortmallen
-    - Nattläge: inverterade men varumärkestrogna färger
+
+    Utseende matchar exakt granskningsvy i page.tsx:
+    - Sidbakgrund: #f7f5f0 (paper), tvingat med !important
+    - Kortbox: vit, border 1px solid #d8d3c8, border-radius 4px
+    - Cloze-svar: cream-highlight (#ede9e1), inte guld
+    - Extra: border-top #ede9e1, font DM Sans, color #8a8478
+    - Logg: renderas aldrig
+    - Nattläge: ignoreras, ljust läge tvingas med !important
     """
 
     css = """
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
 
-/* ── CSS-variabler (ljusläge) ──────────────────────────────── */
-:root {
-  --ink:    #0d0d0d;
-  --paper:  #f7f5f0;
-  --cream:  #ede9e1;
-  --rule:   #d8d3c8;
-  --muted:  #8a8478;
-  --gold:   #c9a84c;
+/* ── Sidbakgrund — pappersfärg ─────────────────────────────── */
+.card {
+  background-color: #f7f5f0 !important;
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: 16px;
+  color: #0d0d0d;
+  padding: 24px 16px;
+  min-height: 100%;
+  box-sizing: border-box;
 }
 
-/* ── Grundkort ─────────────────────────────────────────────── */
-.card {
-  font-family: 'DM Serif Display', Georgia, serif;
-  font-size: 1.05rem;
-  line-height: 1.65;
-  text-align: center;
-  color: var(--ink);
-  background-color: var(--paper);
+/* ── Kortbox — vit, kantad, lätt skugga ────────────────────── */
+.dimindo-card {
+  background: #ffffff !important;
+  border: 1px solid #d8d3c8;
+  border-radius: 4px;
+  padding: 20px 22px;
   max-width: 640px;
   margin: 0 auto;
-  padding: 40px 28px;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  text-align: left;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: #0d0d0d;
 }
 
-/* ── Cloze-lucka (framsidan) och cloze-svar (baksidan) ─────── */
+/* ── Cloze: cream-highlight (identiskt med granskningsvyn) ─── */
+/* Gäller både [...]‐luckan på framsidan och svaret på baksidan */
 .cloze {
-  font-weight: bold;
-  color: var(--gold);
+  background: #ede9e1 !important;
+  color: #0d0d0d !important;
+  padding: 1px 4px;
+  border-radius: 2px;
+  font-weight: 500;
 }
 
-/* ── Extra-fält ────────────────────────────────────────────── */
-.extra-divider {
-  width: 50%;
-  margin: 22px auto 16px auto;
-  border: none;
-  border-top: 1px solid var(--rule);
-}
-
+/* ── Extra-fält ─────────────────────────────────────────────── */
 .extra-text {
   font-family: 'DM Sans', sans-serif;
   font-weight: 300;
   font-size: 0.82rem;
-  color: var(--muted);
+  color: #8a8478;
   line-height: 1.55;
+  border-top: 1px solid #ede9e1;
+  padding-top: 8px;
+  margin-top: 8px;
 }
 
-/* ── Bild ──────────────────────────────────────────────────── */
+/* ── Bild ───────────────────────────────────────────────────── */
 .bild-container {
-  margin-top: 20px;
+  margin-top: 16px;
 }
 
 .bild-container img {
   max-width: 100%;
   border-radius: 4px;
 }
-
-/* ── Nattläge ──────────────────────────────────────────────── */
-.nightMode .card {
-  --ink:   #e4e0d8;
-  --paper: #1c1b18;
-  --rule:  #3c3b38;
-  --muted: #7a7870;
-  background-color: var(--paper) !important;
-  color: var(--ink) !important;
-}
-
-/* gold behålls oförändrad — fungerar på mörk bakgrund */
-.nightMode .cloze {
-  color: var(--gold);
-}
 """
 
-    qfmt = "{{cloze:Text}}"
+    # Framsidan: kortboxen wrappas i .dimindo-card
+    qfmt = '<div class="dimindo-card">{{cloze:Text}}</div>'
 
-    afmt = """{{cloze:Text}}
+    # Baksidan: svar + extra (Logg renderas ej)
+    afmt = """<div class="dimindo-card">{{cloze:Text}}
 
 {{#Back Extra}}
-<div class="extra-divider"></div>
 <div class="extra-text">{{Back Extra}}</div>
 {{/Back Extra}}
 
 {{#Bild}}
 <div class="bild-container">{{Bild}}</div>
-{{/Bild}}"""
+{{/Bild}}
+</div>"""
 
     return genanki.Model(
         generate_model_id(),
@@ -115,7 +105,7 @@ def create_anki_model() -> genanki.Model:
         fields=[
             {'name': 'Text'},
             {'name': 'Back Extra'},
-            {'name': 'Logg'},   # Fältet finns för dataintegritet men renderas ej i mallen
+            {'name': 'Logg'},   # Finns för dataintegritet — renderas aldrig i mallen
             {'name': 'Bild'},
         ],
         templates=[
