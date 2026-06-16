@@ -601,17 +601,20 @@ export default function Home() {
 
             {state === 'upload' && (
               <div className={styles.settingsRow}>
-                <select
-                  className={styles.langSelect}
-                  value={language}
-                  onChange={e => setLanguage(e.target.value)}
-                >
-                  <option value="English">🇬🇧 English</option>
-                  <option value="Swedish">🇸🇪 Swedish</option>
-                  <option value="German">🇩🇪 German</option>
-                  <option value="French">🇫🇷 French</option>
-                  <option value="Spanish">🇪🇸 Spanish</option>
-                </select>
+                <div className={styles.langGroup}>
+                  <label className={styles.langLabel}>Output language:</label>
+                  <select
+                    className={styles.langSelect}
+                    value={language}
+                    onChange={e => setLanguage(e.target.value)}
+                  >
+                    <option value="English">🇬🇧 English</option>
+                    <option value="Swedish">🇸🇪 Swedish</option>
+                    <option value="German">🇩🇪 German</option>
+                    <option value="French">🇫🇷 French</option>
+                    <option value="Spanish">🇪🇸 Spanish</option>
+                  </select>
+                </div>
               </div>
             )}
 

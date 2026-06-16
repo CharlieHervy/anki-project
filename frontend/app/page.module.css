@@ -234,6 +234,19 @@
 }
 .langSelect:focus { border-color: var(--ink); }
 
+.langGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.langLabel {
+  font-size: 0.75rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 /* ─────────────────────────────────────────────
    Button row
 ───────────────────────────────────────────── */
