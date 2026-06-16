@@ -120,11 +120,15 @@ async def generate(
     except Exception as e:
         return sse_error(f"Quota consumption failed: {str(e)}")
 
+    # ── ÄNDRING 1: Uppdaterad felhantering efter consume_generation ──────────
     if not consume_response.data.get('success'):
+        data = consume_response.data
         return sse_error(
             'quota_exceeded',
-            daily_remaining=consume_response.data.get('daily_remaining', 0),
-            quick_refill_remaining=consume_response.data.get('quick_refill_remaining', 0)
+            reason=data.get('reason', 'quota_exceeded'),
+            lifetime_remaining=data.get('lifetime_remaining', 0),
+            monthly_remaining=data.get('monthly_remaining', 0),
+            quick_refill_remaining=data.get('quick_refill_remaining', 0)
         )
 
     # 4. Skapa DB-session (efter kvotcheck — undviker tomma sessioner vid kvotfel)
@@ -329,21 +333,33 @@ async def stripe_webhook(request: Request):
         if product_type == 'quick_refill':
             supabase.rpc('add_quick_refill', {'p_user_id': user_id}).execute()
 
+        # ── ÄNDRING 2: Pro-aktivering med billing anniversary ────────────────
         elif product_type == 'pro':
+            from datetime import datetime, timezone
+            subscription_id = session.subscription
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            period_end = datetime.fromtimestamp(
+                subscription.current_period_end, tz=timezone.utc
+            ).isoformat()
             supabase.table('user_quotas').upsert({
-                'user_id': user_id,
-                'plan': 'pro',
-                'daily_generations_limit': 3
+                'user_id':                    user_id,
+                'plan':                       'pro',
+                'monthly_generations_used':   0,
+                'monthly_generations_limit':  30,
+                'monthly_reset_at':           period_end,
             }).execute()
 
+    # ── ÄNDRING 3: Nedgradering till free ────────────────────────────────────
     elif event.type == 'customer.subscription.deleted':
         metadata = safe_metadata(event.data.object)
         user_id = metadata.get('user_id')
 
         if user_id:
             supabase.table('user_quotas').update({
-                'plan': 'free',
-                'daily_generations_limit': 1
+                'plan':                         'free',
+                'lifetime_generations_used':    0,
+                'monthly_generations_used':     0,
+                'monthly_reset_at':             None,
             }).eq('user_id', user_id).execute()
 
     return {"status": "ok"}
@@ -395,7 +411,6 @@ async def create_checkout(
     return {"url": session.url}
 
 
-
 # ── /api/sessions ─────────────────────────────────────────────────────────────
 
 @app.get("/api/sessions")
@@ -421,7 +436,6 @@ async def get_sessions(
             "card_count": card_count
         })
     return result
-
 
 
 # ── /api/sessions/{session_id}/source ────────────────────────────────────────
@@ -492,7 +506,7 @@ async def explain(
         "even if they are not mentioned in the source material.\n"
         "- Reference specific card content when it aids understanding, "
         "but never limit your answer to what the cards say."
-)
+    )
 
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
 

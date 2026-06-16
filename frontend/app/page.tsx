@@ -28,6 +28,23 @@ type Session = {
 
 type AppState = 'upload' | 'generating' | 'review' | 'exporting' | 'done'
 
+type Quota =
+  | {
+      plan: 'free'
+      lifetime_used: number
+      lifetime_limit: number
+      lifetime_remaining: number
+      quick_refill_remaining: number
+    }
+  | {
+      plan: 'pro'
+      monthly_used: number
+      monthly_limit: number
+      monthly_remaining: number
+      monthly_reset_at: string
+      quick_refill_remaining: number
+    }
+
 function SidebarIcon() {
   return (
     <svg width="15" height="14" viewBox="0 0 15 14" fill="currentColor" aria-hidden="true">
@@ -60,12 +77,11 @@ export default function Home() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [language, setLanguage] = useState('English')
-  const [quota, setQuota] = useState<{
-    daily_remaining: number
-    quick_refill_remaining: number
-    plan: string
-  } | null>(null)
+  const [quota, setQuota] = useState<Quota | null>(null)
   const [quotaExceeded, setQuotaExceeded] = useState(false)
+  const [quotaExceededReason, setQuotaExceededReason] = useState<
+    'lifetime_quota_exceeded' | 'monthly_quota_exceeded' | null
+  >(null)
   const [paymentSuccess, setPaymentSuccess] = useState(false)
   const [sourceMaterial, setSourceMaterial] = useState<string | null>(null)
   const [showSource, setShowSource] = useState(false)
@@ -242,6 +258,11 @@ export default function Home() {
               stopTimer()
               if (event.message === 'quota_exceeded') {
                 setQuotaExceeded(true)
+                setQuotaExceededReason(
+                  event.reason === 'monthly_quota_exceeded'
+                    ? 'monthly_quota_exceeded'
+                    : 'lifetime_quota_exceeded'
+                )
               } else {
                 setError(event.message)
               }
@@ -394,6 +415,7 @@ export default function Home() {
     setCards([])
     setStreamCards([])
     setQuotaExceeded(false)
+    setQuotaExceededReason(null)
     setSourceMaterial(null)
     setShowSource(false)
     setSessionId('')
@@ -429,6 +451,36 @@ export default function Home() {
       return `${wordCount.toLocaleString()} words · 2 generations`
     }
     return `${wordCount.toLocaleString()} words · 3 generations`
+  }
+
+  // Quota indicator helpers
+  function formatResetDate(isoString: string): string {
+    return new Date(isoString).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+    })
+  }
+
+  function quotaIndicatorText(): string | null {
+    if (!user || !quota) return null
+    if (quota.plan === 'free') {
+      const base = `${quota.lifetime_used} of ${quota.lifetime_limit} lifetime generations used`
+      return quota.quick_refill_remaining > 0
+        ? `${base} · ${quota.quick_refill_remaining} Quick Refill`
+        : base
+    }
+    // pro plan
+    const resetLabel = `Resets ${formatResetDate(quota.monthly_reset_at)}`
+    if (quota.monthly_remaining === 0) {
+      const base = `No generations remaining · ${resetLabel}`
+      return quota.quick_refill_remaining > 0
+        ? `${base} · ${quota.quick_refill_remaining} Quick Refill`
+        : base
+    }
+    const base = `${quota.monthly_remaining} generation${quota.monthly_remaining !== 1 ? 's' : ''} remaining this month · ${resetLabel}`
+    return quota.quick_refill_remaining > 0
+      ? `${base} · ${quota.quick_refill_remaining} Quick Refill`
+      : base
   }
 
   const approvedCount = cards.filter(c => c.approved).length
@@ -471,20 +523,38 @@ export default function Home() {
 
             {quotaExceeded && (
               <div className={styles.quotaError}>
-                <p className={styles.quotaErrorTitle}>
-                  You've used all your generations for today.
-                </p>
-                <p className={styles.quotaErrorSub}>
-                  Next reset: tonight at midnight.
-                </p>
-                <div className={styles.quotaErrorActions}>
-                  <button onClick={() => handleCheckout('pro')} className={styles.btnPrimary}>
-                    Upgrade to Pro →
-                  </button>
-                  <button onClick={() => handleCheckout('quick_refill')} className={styles.btnSecondary}>
-                    Buy a Quick Refill →
-                  </button>
-                </div>
+                {quotaExceededReason === 'monthly_quota_exceeded' ? (
+                  <>
+                    <p className={styles.quotaErrorTitle}>
+                      You've used all generations for this month.
+                    </p>
+                    <p className={styles.quotaErrorSub}>
+                      Buy a Quick Refill to continue.
+                    </p>
+                    <div className={styles.quotaErrorActions}>
+                      <button onClick={() => handleCheckout('quick_refill')} className={styles.btnPrimary}>
+                        Buy a Quick Refill →
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p className={styles.quotaErrorTitle}>
+                      You've used all 3 lifetime generations.
+                    </p>
+                    <p className={styles.quotaErrorSub}>
+                      Upgrade to Pro or buy a Quick Refill.
+                    </p>
+                    <div className={styles.quotaErrorActions}>
+                      <button onClick={() => handleCheckout('pro')} className={styles.btnPrimary}>
+                        Upgrade to Pro →
+                      </button>
+                      <button onClick={() => handleCheckout('quick_refill')} className={styles.btnSecondary}>
+                        Buy a Quick Refill →
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
 
@@ -503,9 +573,9 @@ export default function Home() {
 
             <p className={styles.eyebrow}>New deck</p>
 
-            {user && quota && state === 'upload' && (
+            {user && quota && state === 'upload' && quotaIndicatorText() && (
               <p className={styles.quotaIndicator}>
-                {quota.daily_remaining} generation{quota.daily_remaining !== 1 ? 's' : ''} remaining today · {quota.quick_refill_remaining} Quick Refill
+                {quotaIndicatorText()}
               </p>
             )}
 
