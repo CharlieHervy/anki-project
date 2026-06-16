@@ -487,8 +487,6 @@ async def explain(
         "- Be concise by default. Expand only when the student explicitly "
         "asks for a detailed explanation.\n"
         "- Reference specific card content when it aids understanding.\n"
-        "- Do not invent facts absent from the source material; if you add "
-        "external context, flag it clearly."
     )
 
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
