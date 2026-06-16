@@ -17,6 +17,8 @@ type Card = {
   approved: boolean
 }
 
+type AiMessage = { role: 'user' | 'assistant'; content: string }
+
 type AppState = 'upload' | 'generating' | 'review' | 'exporting' | 'done'
 
 export default function Home() {
@@ -50,7 +52,21 @@ export default function Home() {
   const [paymentSuccess, setPaymentSuccess] = useState(false)
   const [sourceMaterial, setSourceMaterial] = useState<string | null>(null)
   const [showSource, setShowSource] = useState(false)
+
+  // ── AI Chat state ──────────────────────────────────────
+  const [aiOpen, setAiOpen] = useState(false)
+  const [aiMessages, setAiMessages] = useState<AiMessage[]>([])
+  const [aiInput, setAiInput] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const aiMessagesEndRef = useRef<HTMLDivElement>(null)
+  // ──────────────────────────────────────────────────────
+
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+  // Auto-scroll AI messages to bottom
+  useEffect(() => {
+    aiMessagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [aiMessages, aiLoading])
 
   // Restore source text after sign-in redirect
   useEffect(() => {
@@ -68,7 +84,6 @@ export default function Home() {
     if (params.get('payment') === 'success') {
       window.history.replaceState({}, '', '/')
       setPaymentSuccess(true)
-      // Quota refreshes automatically via quota-fetch useEffect when state === 'upload'
     }
   }, [])
 
@@ -87,7 +102,6 @@ export default function Home() {
         setCards(data.cards ?? [])
         setSessionId(sid)
         setState('review')
-        // Fetch source material for the review toggle
         fetch(`${API}/api/sessions/${sid}/source`, {
           headers: { 'x-user-id': user.id },
         })
@@ -95,7 +109,7 @@ export default function Home() {
           .then(src => setSourceMaterial(src.source_material ?? null))
           .catch(() => {})
       })
-      .catch(() => {}) // silently ignore — user stays on upload view
+      .catch(() => {})
   }, [user, isLoaded])
 
   // Fetch quota when user lands on or returns to upload view
@@ -107,7 +121,7 @@ export default function Home() {
     })
       .then(r => r.json())
       .then(data => setQuota(data))
-      .catch(() => {}) // non-critical — silently ignore
+      .catch(() => {})
   }, [user, isLoaded, state, timezone])
 
   // --- File Upload ---
@@ -181,7 +195,6 @@ export default function Home() {
               })
               const cardsData = await cardsRes.json()
               setCards(cardsData.cards)
-              // Fetch source material for the review toggle
               fetch(`${API}/api/sessions/${currentSessionId}/source`, {
                 headers: authHeaders,
               })
@@ -208,6 +221,39 @@ export default function Home() {
       setError('Something went wrong. Make sure the backend is running.')
       setState('upload')
       console.error(err)
+    }
+  }
+
+  // --- AI Chat ---
+  async function handleAiSend() {
+    if (!aiInput.trim() || aiLoading) return
+    const userMsg: AiMessage = { role: 'user', content: aiInput.trim() }
+    const newMessages = [...aiMessages, userMsg]
+    setAiMessages(newMessages)
+    setAiInput('')
+    setAiLoading(true)
+    try {
+      const res = await fetch(`${API}/api/explain`, {
+        method: 'POST',
+        headers: { ...authHeaders, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          source_material: sourceMaterial,
+          cards,
+          messages: newMessages,
+        }),
+      })
+      const data = await res.json()
+      setAiMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: data.response ?? 'No response received.' },
+      ])
+    } catch {
+      setAiMessages(prev => [
+        ...prev,
+        { role: 'assistant', content: 'Something went wrong. Please try again.' },
+      ])
+    } finally {
+      setAiLoading(false)
     }
   }
 
@@ -305,7 +351,7 @@ export default function Home() {
     }
   }
 
-  // Reset to blank upload state
+  // Reset to blank upload state — clears AI chat too
   function handleNewDeck() {
     setState('upload')
     setSourceText('')
@@ -315,6 +361,10 @@ export default function Home() {
     setSourceMaterial(null)
     setShowSource(false)
     setSessionId('')
+    setAiOpen(false)
+    setAiMessages([])
+    setAiInput('')
+    setAiLoading(false)
   }
 
   // Word count helpers
@@ -349,7 +399,7 @@ export default function Home() {
 
   // --- Rendering ---
   return (
-    <main className={styles.root}>
+    <main className={`${styles.root}${aiOpen && state === 'review' ? ` ${styles.rootAiOpen}` : ''}`}>
 
       {/* ── Topbar ── */}
       <header className={styles.topbar}>
@@ -376,7 +426,7 @@ export default function Home() {
               </p>
             )}
 
-            {/* Quota exceeded — inline block, separate from generic errors */}
+            {/* Quota exceeded */}
             {quotaExceeded && (
               <div className={styles.quotaError}>
                 <p className={styles.quotaErrorTitle}>
@@ -477,7 +527,7 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Process view — replaces text streaming */}
+            {/* Process view */}
             {state === 'generating' && (
               <div className={styles.processView}>
                 <div className={styles.streamHeader}>
@@ -634,6 +684,81 @@ export default function Home() {
                 Export {approvedCount} cards as .apkg →
               </button>
             </div>
+
+            {/* ── AI Float Button ── */}
+            {!aiOpen && (
+              <button
+                className={styles.aiFloatBtn}
+                onClick={() => setAiOpen(true)}
+                aria-label="Open Study Assistant"
+              >
+                AI
+              </button>
+            )}
+
+            {/* ── AI Chat Panel ── */}
+            {aiOpen && (
+              <div className={styles.aiPanel}>
+                <div className={styles.aiPanelHeader}>
+                  <span className={styles.aiPanelTitle}>Study Assistant</span>
+                  <button
+                    className={styles.aiPanelClose}
+                    onClick={() => setAiOpen(false)}
+                    aria-label="Close Study Assistant"
+                  >
+                    ×
+                  </button>
+                </div>
+
+                <div className={styles.aiMessages}>
+                  {aiMessages.length === 0 && !aiLoading && (
+                    <p className={styles.aiEmptyState}>
+                      Ask about any card or concept in your source material.
+                    </p>
+                  )}
+                  {aiMessages.map((msg, i) => (
+                    <div
+                      key={i}
+                      className={msg.role === 'user' ? styles.aiMsgUser : styles.aiMsgAssistant}
+                    >
+                      <p className={msg.role === 'user' ? styles.aiMsgContentUser : styles.aiMsgContentAssistant}>
+                        {msg.content}
+                      </p>
+                    </div>
+                  ))}
+                  {aiLoading && (
+                    <div className={styles.aiMsgAssistant}>
+                      <p className={styles.aiMsgContentLoading}>···</p>
+                    </div>
+                  )}
+                  <div ref={aiMessagesEndRef} />
+                </div>
+
+                <div className={styles.aiInputArea}>
+                  <textarea
+                    className={styles.aiTextarea}
+                    value={aiInput}
+                    onChange={e => setAiInput(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault()
+                        handleAiSend()
+                      }
+                    }}
+                    placeholder="Ask a question…"
+                    rows={2}
+                    disabled={aiLoading}
+                  />
+                  <button
+                    onClick={handleAiSend}
+                    disabled={!aiInput.trim() || aiLoading}
+                    className={styles.aiSendBtn}
+                  >
+                    Send
+                  </button>
+                </div>
+              </div>
+            )}
           </>
         )}
 

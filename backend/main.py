@@ -9,6 +9,7 @@ from supabase import create_client, Client
 load_dotenv()
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Header, Request, Query
+from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from sqlalchemy.orm import Session
@@ -439,6 +440,75 @@ async def get_session_source(
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"source_material": session.source_material or ""}
+
+
+class ExplainCardItem(BaseModel):
+    text: str
+    extra: str = ""
+
+class ExplainMessage(BaseModel):
+    role: str  # "user" | "assistant"
+    content: str
+
+class ExplainRequest(BaseModel):
+    source_material: str
+    cards: list[ExplainCardItem]
+    messages: list[ExplainMessage]
+
+
+# ── /api/explain ──────────────────────────────────────────────────────────────
+
+@app.post("/api/explain")
+async def explain(
+    body: ExplainRequest,
+    x_user_id: str = Header(...)
+):
+    """
+    Session-scoped AI-chatt i granskningsvyn.
+    Inget kvotavdrag. Ingen streaming. Svarar på studentens språk.
+    """
+    import asyncio
+    from generator import client
+
+    cards_text = "\n\n".join(
+        f"Card {i + 1}:\nFront: {c.text}\nBack: {c.extra}"
+        for i, c in enumerate(body.cards)
+    )
+
+    system_prompt = (
+        "You are a knowledgeable study assistant embedded in Dimindo, "
+        "an AI-powered flashcard application.\n\n"
+        "The student is currently reviewing their generated flashcards. "
+        "They may ask about any card, concept, or passage from the material.\n\n"
+        f"SOURCE MATERIAL:\n{body.source_material}\n\n"
+        f"GENERATED FLASHCARDS:\n{cards_text}\n\n"
+        "Instructions:\n"
+        "- Always respond in the same language the student writes in.\n"
+        "- Be concise by default. Expand only when the student explicitly "
+        "asks for a detailed explanation.\n"
+        "- Reference specific card content when it aids understanding.\n"
+        "- Do not invent facts absent from the source material; if you add "
+        "external context, flag it clearly."
+    )
+
+    messages = [{"role": m.role, "content": m.content} for m in body.messages]
+
+    try:
+        response = await asyncio.to_thread(
+            lambda: client.messages.create(
+                model="claude-haiku-4-5",
+                max_tokens=2048,
+                system=system_prompt,
+                messages=messages
+            )
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI error: {str(e)}")
+
+    if not response.content:
+        raise HTTPException(status_code=500, detail="Empty response from AI")
+
+    return {"response": response.content[0].text}
 
 
 # ── /api/upload ───────────────────────────────────────────────────────────────
