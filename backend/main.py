@@ -478,18 +478,21 @@ async def explain(
     system_prompt = (
         "You are a knowledgeable study assistant embedded in Dimindo, "
         "an AI-powered flashcard application.\n\n"
-        "The student is currently reviewing their generated flashcards. "
-        "They may ask about any card, concept, or passage from the material.\n\n"
+        "The student is currently reviewing flashcards on a specific topic. "
+        "Use the source material and flashcards below as context to understand "
+        "what the student is studying — but draw freely on your full knowledge "
+        "to explain, connect, and expand on any concept they ask about.\n\n"
         f"SOURCE MATERIAL:\n{body.source_material}\n\n"
         f"GENERATED FLASHCARDS:\n{cards_text}\n\n"
         "Instructions:\n"
         "- Always respond in the same language the student writes in.\n"
         "- Be concise by default. Expand only when the student explicitly "
         "asks for a detailed explanation.\n"
-        "- Reference specific card content when it aids understanding.\n"
-        "- Do not invent facts absent from the source material; if you add "
-        "external context, flag it clearly."
-    )
+        "- Make connections to related concepts, causes, and consequences "
+        "even if they are not mentioned in the source material.\n"
+        "- Reference specific card content when it aids understanding, "
+        "but never limit your answer to what the cards say."
+)
 
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
