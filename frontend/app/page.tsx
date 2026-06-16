@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { UserButton, useUser, useClerk } from '@clerk/nextjs'
+import ReactMarkdown from 'react-markdown'
 import styles from './page.module.css'
 
 const API = 'https://anki-project-production.up.railway.app'
@@ -404,12 +405,14 @@ export default function Home() {
       {/* ── Topbar ── */}
       <header className={styles.topbar}>
         <span className={styles.wordmark}>Dimindo</span>
-        {user && (
-          <Link href="/history" className={styles.topbarLink}>
-            Previous generations
-          </Link>
-        )}
-        <UserButton />
+        <div className={styles.topbarRight}>
+          {user && (
+            <Link href="/history" className={styles.topbarLink}>
+              Previous generations
+            </Link>
+          )}
+          <UserButton />
+        </div>
       </header>
 
       <div className={styles.content}>
@@ -419,14 +422,12 @@ export default function Home() {
         ══════════════════════════════════ */}
         {(state === 'upload' || state === 'generating') && (
           <>
-            {/* Payment success confirmation */}
             {paymentSuccess && (
               <p className={styles.paymentSuccess}>
                 ✓ Payment successful. Your plan has been updated.
               </p>
             )}
 
-            {/* Quota exceeded */}
             {quotaExceeded && (
               <div className={styles.quotaError}>
                 <p className={styles.quotaErrorTitle}>
@@ -527,7 +528,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* Process view */}
             {state === 'generating' && (
               <div className={styles.processView}>
                 <div className={styles.streamHeader}>
@@ -721,9 +721,13 @@ export default function Home() {
                       key={i}
                       className={msg.role === 'user' ? styles.aiMsgUser : styles.aiMsgAssistant}
                     >
-                      <p className={msg.role === 'user' ? styles.aiMsgContentUser : styles.aiMsgContentAssistant}>
-                        {msg.content}
-                      </p>
+                      {msg.role === 'user' ? (
+                        <p className={styles.aiMsgContentUser}>{msg.content}</p>
+                      ) : (
+                        <div className={styles.aiMsgContentAssistant}>
+                          <ReactMarkdown>{msg.content}</ReactMarkdown>
+                        </div>
+                      )}
                     </div>
                   ))}
                   {aiLoading && (

@@ -10,7 +10,7 @@
   background: var(--paper);
   font-family: 'DM Sans', sans-serif;
   color: var(--ink);
-  transition: padding-right 0.28s cubic-bezier(0.16, 1, 0.3, 1); /* ← lägg till */
+  transition: padding-right 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* ─────────────────────────────────────────────
@@ -35,14 +35,19 @@
   color: var(--ink);
 }
 
-/* Discrete nav link — "Previous generations" → /history */
+/* Right-side topbar group — A2 fix */
+.topbarRight {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .topbarLink {
   font-family: 'DM Sans', sans-serif;
   font-size: 0.78rem;
   color: var(--muted);
   text-decoration: none;
   transition: color 0.15s;
-  margin-right: 4px;
 }
 .topbarLink:hover { color: var(--ink); }
 
@@ -124,9 +129,10 @@
   margin-bottom: 16px;
 }
 
+/* B1 — clamp matches demo heading scale */
 .heading {
   font-family: 'DM Serif Display', serif;
-  font-size: 2rem;
+  font-size: clamp(2rem, 5vw, 3.2rem);
   line-height: 1.15;
   letter-spacing: -0.02em;
   color: var(--ink);
@@ -299,7 +305,6 @@
   color: var(--muted);
 }
 
-/* Gold pulsing dot — same as demo */
 .scanDot {
   width: 6px;
   height: 6px;
@@ -348,7 +353,6 @@
   margin-top: 24px;
 }
 
-/* Static gold dot — shown when done */
 .scanDotDone {
   width: 6px;
   height: 6px;
@@ -392,7 +396,6 @@
 }
 .reviewBack:hover { color: var(--ink); }
 
-/* Source material toggle */
 .sourceToggle {
   display: inline-flex;
   align-items: center;
@@ -410,7 +413,6 @@
 }
 .sourceToggle:hover { color: var(--ink); }
 
-/* Source material panel */
 .sourcePanel {
   max-height: 300px;
   overflow-y: auto;
@@ -507,7 +509,6 @@
   color: var(--ink);
 }
 
-/* Cloze highlight — injected via dangerouslySetInnerHTML */
 .cardTextContent strong {
   background: var(--cream);
   padding: 1px 4px;
@@ -540,7 +541,7 @@
 }
 .cardFront:hover .cardHint { opacity: 1; }
 
-/* Approve button */
+/* Approve button — B3: hover state added */
 .approveBtn {
   flex-shrink: 0;
   width: 32px;
@@ -556,6 +557,7 @@
   font-size: 0.875rem;
   transition: border-color 0.15s, background 0.15s, color 0.15s;
 }
+.approveBtn:hover { border-color: var(--muted); }
 .approveBtnOn {
   border-color: var(--ink);
   background: var(--ink);
@@ -696,8 +698,6 @@
 
 /* ─────────────────────────────────────────────
    AI panel — root modifier
-   NOTE: Also add `transition: padding-right 0.28s cubic-bezier(0.16, 1, 0.3, 1);`
-   to the existing .root rule for a smooth shift animation.
 ───────────────────────────────────────────── */
 .rootAiOpen {
   padding-right: 380px;
@@ -777,6 +777,7 @@
   color: var(--muted);
 }
 
+/* B2 — explicit dimensions for reliable click target */
 .aiPanelClose {
   background: none;
   border: none;
@@ -785,6 +786,8 @@
   font-size: 1.3rem;
   line-height: 1;
   padding: 0;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -824,12 +827,13 @@
   justify-content: flex-start;
 }
 
+/* B5 — 0px on the "tail" corner */
 .aiMsgContentUser {
   max-width: 88%;
   font-size: 0.85rem;
   line-height: 1.6;
   padding: 10px 14px;
-  border-radius: 4px 4px 2px 4px;
+  border-radius: 4px 4px 0px 4px;
   background: var(--ink);
   color: white;
   font-family: 'DM Sans', sans-serif;
@@ -837,17 +841,59 @@
   word-wrap: break-word;
 }
 
+/* B5 — 0px on the "tail" corner; white-space removed for ReactMarkdown */
 .aiMsgContentAssistant {
   max-width: 88%;
   font-size: 0.85rem;
   line-height: 1.65;
   padding: 10px 14px;
-  border-radius: 4px 4px 4px 2px;
+  border-radius: 4px 4px 4px 0px;
   background: var(--cream);
   color: var(--ink);
   font-family: 'DM Sans', sans-serif;
-  white-space: pre-wrap;
   word-wrap: break-word;
+}
+
+/* ── ReactMarkdown child elements ── */
+.aiMsgContentAssistant p {
+  margin-bottom: 0.55em;
+}
+.aiMsgContentAssistant p:last-child {
+  margin-bottom: 0;
+}
+.aiMsgContentAssistant h1,
+.aiMsgContentAssistant h2,
+.aiMsgContentAssistant h3 {
+  font-family: 'DM Serif Display', serif;
+  font-size: 0.9rem;
+  font-weight: normal;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 0.65em 0 0.25em;
+}
+.aiMsgContentAssistant h1:first-child,
+.aiMsgContentAssistant h2:first-child,
+.aiMsgContentAssistant h3:first-child {
+  margin-top: 0;
+}
+.aiMsgContentAssistant strong {
+  font-weight: 500;
+}
+.aiMsgContentAssistant ul,
+.aiMsgContentAssistant ol {
+  padding-left: 1.2em;
+  margin-bottom: 0.5em;
+}
+.aiMsgContentAssistant li {
+  margin-bottom: 0.2em;
+  line-height: 1.55;
+}
+.aiMsgContentAssistant code {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.78rem;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 4px;
+  border-radius: 2px;
 }
 
 .aiMsgContentLoading {
@@ -855,7 +901,7 @@
   font-size: 0.85rem;
   letter-spacing: 0.22em;
   padding: 10px 14px;
-  border-radius: 4px 4px 4px 2px;
+  border-radius: 4px 4px 4px 0px;
   background: var(--cream);
   color: var(--muted);
   animation: loadingPulse 1.2s ease-in-out infinite;

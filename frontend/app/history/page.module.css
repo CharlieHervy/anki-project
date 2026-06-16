@@ -75,6 +75,7 @@
   gap: 8px;
 }
 
+/* B4 — cream background on hover */
 .sessionCard {
   display: block;
   background: white;
@@ -82,9 +83,12 @@
   border-radius: 4px;
   padding: 18px 22px;
   text-decoration: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.15s;
 }
-.sessionCard:hover { border-color: var(--ink); }
+.sessionCard:hover {
+  border-color: var(--ink);
+  background: var(--cream);
+}
 
 .sessionTitle {
   font-family: 'DM Sans', sans-serif;
