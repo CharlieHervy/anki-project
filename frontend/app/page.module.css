@@ -21,6 +21,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 18px 32px;
+  min-height: 68px;
   border-bottom: 1px solid var(--rule);
   background: var(--paper);
   position: sticky;
