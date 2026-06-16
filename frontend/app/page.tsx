@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import Link from 'next/link'
 import { UserButton, useUser, useClerk } from '@clerk/nextjs'
 import ReactMarkdown from 'react-markdown'
 import styles from './page.module.css'
@@ -20,7 +19,24 @@ type Card = {
 
 type AiMessage = { role: 'user' | 'assistant'; content: string }
 
+type Session = {
+  session_id: string
+  title: string | null
+  created_at: string
+  card_count: number
+}
+
 type AppState = 'upload' | 'generating' | 'review' | 'exporting' | 'done'
+
+function SidebarIcon() {
+  return (
+    <svg width="15" height="14" viewBox="0 0 15 14" fill="currentColor" aria-hidden="true">
+      <rect x="0" y="0" width="4.5" height="14" rx="1.5" />
+      <rect x="6.5" y="0" width="8.5" height="5.5" rx="1" />
+      <rect x="6.5" y="8.5" width="8.5" height="5.5" rx="1" />
+    </svg>
+  )
+}
 
 export default function Home() {
   const { user, isLoaded } = useUser()
@@ -60,6 +76,12 @@ export default function Home() {
   const [aiInput, setAiInput] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
   const aiMessagesEndRef = useRef<HTMLDivElement>(null)
+  // ──────────────────────────────────────────────────────
+
+  // ── Sidebar state ──────────────────────────────────────
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarSessions, setSidebarSessions] = useState<Session[]>([])
+  const [sidebarLoading, setSidebarLoading] = useState(false)
   // ──────────────────────────────────────────────────────
 
   const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -124,6 +146,19 @@ export default function Home() {
       .then(data => setQuota(data))
       .catch(() => {})
   }, [user, isLoaded, state, timezone])
+
+  // Fetch session history for sidebar (eager — no loading flash on open)
+  useEffect(() => {
+    if (!user || !isLoaded) return
+    setSidebarLoading(true)
+    fetch(`${API}/api/sessions`, {
+      headers: { 'x-user-id': user.id },
+    })
+      .then(r => r.json())
+      .then(data => setSidebarSessions(Array.isArray(data) ? data : (data.sessions ?? [])))
+      .catch(() => {})
+      .finally(() => setSidebarLoading(false))
+  }, [user, isLoaded])
 
   // --- File Upload ---
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -398,19 +433,25 @@ export default function Home() {
 
   const approvedCount = cards.filter(c => c.approved).length
 
+  function formatDate(iso: string): string {
+    const d = new Date(iso)
+    const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+    const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+    return `${date} at ${time}`
+  }
+
   // --- Rendering ---
   return (
-    <main className={`${styles.root}${aiOpen && state === 'review' ? ` ${styles.rootAiOpen}` : ''}`}>
+    <main className={[
+      styles.root,
+      aiOpen && state === 'review' ? styles.rootAiOpen : '',
+      sidebarOpen ? styles.rootSidebarOpen : '',
+    ].filter(Boolean).join(' ')}>
 
       {/* ── Topbar ── */}
       <header className={styles.topbar}>
         <span className={styles.wordmark}>Dimindo</span>
         <div className={styles.topbarRight}>
-          {user && (
-            <Link href="/history" className={styles.topbarLink}>
-              Previous generations
-            </Link>
-          )}
           <UserButton />
         </div>
       </header>
@@ -793,6 +834,57 @@ export default function Home() {
         )}
 
       </div>
+
+      {/* ── Sidebar Drawer ── */}
+      {user && (
+        <>
+          <aside className={`${styles.sidebar}${sidebarOpen ? ` ${styles.sidebarOpen}` : ''}`}>
+            <div className={styles.sidebarHeader}>
+              <span className={styles.sidebarTitle}>Recents</span>
+              <button
+                className={styles.sidebarIconBtn}
+                onClick={() => setSidebarOpen(false)}
+                aria-label="Close sidebar"
+              >
+                <SidebarIcon />
+              </button>
+            </div>
+            <div className={styles.sidebarList}>
+              {sidebarLoading && (
+                <p className={styles.sidebarEmpty}>Loading…</p>
+              )}
+              {!sidebarLoading && sidebarSessions.length === 0 && (
+                <p className={styles.sidebarEmpty}>No sessions yet.</p>
+              )}
+              {sidebarSessions.map(session => (
+                <a
+                  key={session.session_id}
+                  href={`/?session_id=${session.session_id}`}
+                  className={styles.sidebarItem}
+                >
+                  <p className={styles.sidebarItemTitle}>
+                    {session.title || 'Untitled session'}
+                  </p>
+                  <p className={styles.sidebarItemMeta}>
+                    {formatDate(session.created_at)} · {session.card_count} card{session.card_count !== 1 ? 's' : ''}
+                  </p>
+                </a>
+              ))}
+            </div>
+          </aside>
+
+          {!sidebarOpen && (
+            <button
+              className={styles.sidebarToggle}
+              onClick={() => setSidebarOpen(true)}
+              aria-label="Open recent sessions"
+            >
+              <SidebarIcon />
+            </button>
+          )}
+        </>
+      )}
+
     </main>
   )
 }
