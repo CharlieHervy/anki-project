@@ -216,7 +216,8 @@ async def generate(
             cards = parse_tsv(full_tsv)
 
             if not cards:
-                yield f"data: {json.dumps({'type': 'error', 'message': \"We couldn't find anything to turn into cards. Try a text with clearer facts or statements.\"})}\n\n"
+                no_cards_payload = json.dumps({'type': 'error', 'message': "We couldn't find anything to turn into cards. Try a text with clearer facts or statements."})
+                yield f"data: {no_cards_payload}\n\n"
                 return
 
             db2 = next(get_db())
