@@ -64,6 +64,8 @@
 
 /* ─────────────────────────────────────────────
    Error banner
+   P3 — anchored directly above the textarea; tighter
+   bottom margin binds it visually to the field below.
 ───────────────────────────────────────────── */
 .error {
   display: flex;
@@ -73,7 +75,7 @@
   border: 1px solid #f5c8bb;
   border-radius: 4px;
   padding: 12px 16px;
-  margin-bottom: 28px;
+  margin-bottom: 14px;
 }
 
 .errorIcon {
@@ -173,6 +175,19 @@
   transition: color 0.15s;
 }
 
+/* P2 — word-limit microcopy, anchored under the (disabled) Generate button.
+   Same warning tone (#b04a2a) as the over-limit word counter, so the two
+   read as a linked cause + explanation. */
+.limitNotice {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  color: #b04a2a;
+  text-align: right;
+  margin-top: 8px;
+}
+
 /* Quota exceeded block */
 .quotaError {
   background: #fdf0ec;
@@ -209,6 +224,25 @@
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+}
+
+/* P1 — each CTA becomes a self-contained option: button + muted caption.
+   Caption uses the same DM Mono metadata voice as the quota indicator. */
+.quotaOption {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+}
+/* Neutralise .btnPrimary { margin-left: auto } inside the column context */
+.quotaOption .btnPrimary { margin-left: 0; }
+
+.quotaOptionDesc {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  line-height: 1.4;
+  color: var(--muted);
 }
 
 /* ─────────────────────────────────────────────
@@ -288,6 +322,19 @@
 }
 .btnPrimary:hover { background: #333; transform: translateY(-1px); }
 .btnPrimary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+/* P1b — idle "awaiting input" state (textarea empty only).
+   Distinct from hard-disabled (0.4 opacity). Inset box-shadow instead of a
+   border → identical box size, so no layout shift when it fills to solid.
+   Placed after .btnPrimary:disabled for specificity. */
+.btnPrimaryIdle,
+.btnPrimaryIdle:disabled {
+  background: transparent;
+  color: var(--muted);
+  box-shadow: inset 0 0 0 1px var(--rule);
+  opacity: 1;
+  cursor: default;
+}
 
 /* ─────────────────────────────────────────────
    Streaming view
@@ -498,10 +545,15 @@
   border: 1px solid var(--rule);
   border-radius: 4px;
   padding: 20px 22px;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, border-color 0.15s;
 }
 
 .cardRejected { opacity: 0.4; }
+
+/* BESLUT 1 — the card surface carries the edit affordance; hover lifts the
+   border toward --muted (calm, matches the EDIT eyebrow colour). Scoped to
+   the review list so streaming cards stay inert. */
+.cardsList .card:hover { border-color: var(--muted); }
 
 .cardContent {
   display: flex;
@@ -514,6 +566,16 @@
   flex: 1;
   min-width: 0;
   cursor: pointer;
+}
+
+/* P2 — discreet card numbering, mirrors the AI's "Card N" references */
+.cardNumber {
+  display: block;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  margin-bottom: 8px;
 }
 
 .cardTextContent {
@@ -545,10 +607,17 @@
   line-height: 1.4;
 }
 
+/* BESLUT 1 — "EDIT" as a DM Mono eyebrow in the card foot. Fades in on hover,
+   right-aligned, --muted (same colour as the hover border → one cohesive unit). */
 .cardHint {
-  font-size: 0.72rem;
-  color: var(--rule);
-  margin-top: 6px;
+  display: block;
+  text-align: right;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 10px;
   opacity: 0;
   transition: opacity 0.15s;
 }
@@ -694,6 +763,51 @@
   line-height: 1.6;
 }
 
+/* P3 — two-step Anki import guidance. Step numbers reuse the DM Mono / gold
+   leading-zero index used by card numbering and the suggestion arrows. */
+.doneSteps {
+  list-style: none;
+  counter-reset: step;
+  max-width: 320px;
+  margin: 24px auto 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.doneSteps li {
+  counter-increment: step;
+  display: flex;
+  gap: 10px;
+  font-size: 0.85rem;
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--ink);
+}
+.doneSteps li::before {
+  content: counter(step, decimal-leading-zero);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+.doneSteps strong { font-weight: 500; }
+
+/* P3 — secondary CTA in the brief's text-link pattern */
+.doneSecondary {
+  display: inline-block;
+  margin-top: 24px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 1px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.doneSecondary:hover { color: var(--ink); border-color: var(--ink); }
+
 .resetBtn {
   display: block;
   width: 100%;
@@ -710,14 +824,10 @@
 .resetBtn:hover { color: var(--ink); }
 
 /* ─────────────────────────────────────────────
-   AI panel — root modifier
-───────────────────────────────────────────── */
-.rootAiOpen {
-  padding-right: 380px;
-}
-
-/* ─────────────────────────────────────────────
    Sidebar — root modifier
+   (BESLUT 2: AI panel no longer shifts content — it overlays. The
+   .rootAiOpen padding-right rule has been removed so the review heading
+   and content stay locked regardless of panel state.)
 ───────────────────────────────────────────── */
 .rootSidebarOpen {
   padding-left: 220px;
@@ -778,12 +888,13 @@
 
 /* ─────────────────────────────────────────────
    AI Panel — header
+   P2 — consistent 24px horizontal padding through header → messages → input.
 ───────────────────────────────────────────── */
 .aiPanelHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 18px 20px;
+  padding: 18px 24px;
   border-bottom: 1px solid var(--rule);
   background: var(--paper);
   flex-shrink: 0;
@@ -821,11 +932,16 @@
 .aiMessages {
   flex: 1;
   overflow-y: auto;
-  padding: 20px 16px;
+  padding: 24px;
   display: flex;
   flex-direction: column;
   gap: 10px;
   scroll-behavior: smooth;
+}
+
+/* P2 — empty state: intro line + a quiet, hairline-divided suggestion menu */
+.aiEmpty {
+  padding: 8px 0;
 }
 
 .aiEmptyState {
@@ -833,9 +949,39 @@
   font-weight: 300;
   color: var(--muted);
   line-height: 1.65;
-  text-align: center;
-  padding: 48px 16px;
+  margin-bottom: 20px;
 }
+
+.aiSuggestions {
+  display: flex;
+  flex-direction: column;
+}
+
+.aiSuggestion {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--rule);
+  padding: 12px 2px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.82rem;
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.aiSuggestion:last-child { border-bottom: 1px solid var(--rule); }
+.aiSuggestion::before {
+  content: '→';
+  color: var(--gold);
+  flex-shrink: 0;
+}
+.aiSuggestion:hover { color: var(--ink); }
 
 .aiMsgUser {
   display: flex;
@@ -881,16 +1027,20 @@
 .aiMsgContentAssistant p:last-child {
   margin-bottom: 0;
 }
+/* P2 — real type scale so even an H3 reads as a heading against body text */
 .aiMsgContentAssistant h1,
 .aiMsgContentAssistant h2,
 .aiMsgContentAssistant h3 {
   font-family: 'DM Serif Display', serif;
-  font-size: 0.9rem;
   font-weight: normal;
   letter-spacing: -0.01em;
+  line-height: 1.25;
   color: var(--ink);
-  margin: 0.65em 0 0.25em;
+  margin: 0.8em 0 0.3em;
 }
+.aiMsgContentAssistant h1 { font-size: 1.1rem; }
+.aiMsgContentAssistant h2 { font-size: 1rem; }
+.aiMsgContentAssistant h3 { font-size: 0.9rem; }
 .aiMsgContentAssistant h1:first-child,
 .aiMsgContentAssistant h2:first-child,
 .aiMsgContentAssistant h3:first-child {
@@ -901,8 +1051,8 @@
 }
 .aiMsgContentAssistant ul,
 .aiMsgContentAssistant ol {
-  padding-left: 1.2em;
-  margin-bottom: 0.5em;
+  padding-left: 1.4em;
+  margin-bottom: 0.6em;
 }
 .aiMsgContentAssistant li {
   margin-bottom: 0.2em;
@@ -937,7 +1087,7 @@
 ───────────────────────────────────────────── */
 .aiInputArea {
   border-top: 1px solid var(--rule);
-  padding: 12px 16px;
+  padding: 16px 24px;
   display: flex;
   gap: 8px;
   align-items: flex-end;
@@ -1103,3 +1253,26 @@
   transition: border-color 0.15s, color 0.15s;
 }
 .sidebarToggle:hover { border-color: var(--ink); color: var(--ink); }
+
+/* P3 — custom hover tooltip (DM Mono, ink-on-paper) instead of native title;
+   appears to the right since the toggle hugs the left edge. */
+.sidebarToggle::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: calc(100% + 8px);
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--paper);
+  background: var(--ink);
+  padding: 5px 9px;
+  border-radius: 3px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+.sidebarToggle:hover::after { opacity: 1; }

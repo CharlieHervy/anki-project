@@ -282,9 +282,13 @@ export default function Home() {
   }
 
   // --- AI Chat ---
-  async function handleAiSend() {
-    if (!aiInput.trim() || aiLoading) return
-    const userMsg: AiMessage = { role: 'user', content: aiInput.trim() }
+  // Accepts an optional preset question (from the empty-state suggestions).
+  // The `typeof preset === 'string'` guard means an accidental click event
+  // passed as the argument falls back to the textarea value.
+  async function handleAiSend(preset?: string) {
+    const text = typeof preset === 'string' ? preset : aiInput
+    if (!text.trim() || aiLoading) return
+    const userMsg: AiMessage = { role: 'user', content: text.trim() }
     const newMessages = [...aiMessages, userMsg]
     setAiMessages(newMessages)
     setAiInput('')
@@ -432,6 +436,10 @@ export default function Home() {
   const wordLimit = quota?.plan === 'pro' ? 9000 : 1000
   const wordLimitExceeded = !!user && !!quota && wordCount > wordLimit
 
+  // P1b — idle "awaiting input" styling applies only when the textarea is
+  // empty (not while generating, not when over the word limit).
+  const generateIdle = state === 'upload' && sourceText.trim() === ''
+
   function wordCountColor(): string {
     const pct = wordCount / wordLimit
     if (pct > 1) return '#b04a2a'
@@ -463,24 +471,22 @@ export default function Home() {
 
   function quotaIndicatorText(): string | null {
     if (!user || !quota) return null
+    const refill = quota.quick_refill_remaining
+    const refillSuffix = `${refill} Quick Refill generation${refill !== 1 ? 's' : ''} remaining`
+
     if (quota.plan === 'free') {
       const base = `${quota.lifetime_used} of ${quota.lifetime_limit} lifetime generations used`
-      return quota.quick_refill_remaining > 0
-        ? `${base} · ${quota.quick_refill_remaining} Quick Refill`
-        : base
+      return refill > 0 ? `${base} · ${refillSuffix}` : base
     }
+
     // pro plan
     const resetLabel = `Resets ${formatResetDate(quota.monthly_reset_at)}`
     if (quota.monthly_remaining === 0) {
       const base = `No generations remaining · ${resetLabel}`
-      return quota.quick_refill_remaining > 0
-        ? `${base} · ${quota.quick_refill_remaining} Quick Refill`
-        : base
+      return refill > 0 ? `${base} · ${refillSuffix}` : base
     }
     const base = `${quota.monthly_remaining} generation${quota.monthly_remaining !== 1 ? 's' : ''} remaining this month · ${resetLabel}`
-    return quota.quick_refill_remaining > 0
-      ? `${base} · ${quota.quick_refill_remaining} Quick Refill`
-      : base
+    return refill > 0 ? `${base} · ${refillSuffix}` : base
   }
 
   const approvedCount = cards.filter(c => c.approved).length
@@ -496,7 +502,6 @@ export default function Home() {
   return (
     <main className={[
       styles.root,
-      aiOpen && state === 'review' ? styles.rootAiOpen : '',
       sidebarOpen ? styles.rootSidebarOpen : '',
     ].filter(Boolean).join(' ')}>
 
@@ -532,9 +537,14 @@ export default function Home() {
                       Buy a Quick Refill to continue.
                     </p>
                     <div className={styles.quotaErrorActions}>
-                      <button onClick={() => handleCheckout('quick_refill')} className={styles.btnPrimary}>
-                        Buy a Quick Refill →
-                      </button>
+                      <div className={styles.quotaOption}>
+                        <button onClick={() => handleCheckout('quick_refill')} className={styles.btnPrimary}>
+                          Buy a Quick Refill →
+                        </button>
+                        <p className={styles.quotaOptionDesc}>
+                          One-time purchase · 5 generations · never expires
+                        </p>
+                      </div>
                     </div>
                   </>
                 ) : (
@@ -546,28 +556,25 @@ export default function Home() {
                       Upgrade to Pro or buy a Quick Refill.
                     </p>
                     <div className={styles.quotaErrorActions}>
-                      <button onClick={() => handleCheckout('pro')} className={styles.btnPrimary}>
-                        Upgrade to Pro →
-                      </button>
-                      <button onClick={() => handleCheckout('quick_refill')} className={styles.btnSecondary}>
-                        Buy a Quick Refill →
-                      </button>
+                      <div className={styles.quotaOption}>
+                        <button onClick={() => handleCheckout('pro')} className={styles.btnPrimary}>
+                          Upgrade to Pro →
+                        </button>
+                        <p className={styles.quotaOptionDesc}>
+                          Subscription · 30 generations per month
+                        </p>
+                      </div>
+                      <div className={styles.quotaOption}>
+                        <button onClick={() => handleCheckout('quick_refill')} className={styles.btnSecondary}>
+                          Buy a Quick Refill →
+                        </button>
+                        <p className={styles.quotaOptionDesc}>
+                          One-time purchase · 5 generations · never expires
+                        </p>
+                      </div>
                     </div>
                   </>
                 )}
-              </div>
-            )}
-
-            {error && (
-              <div className={styles.error}>
-                <span className={styles.errorIcon}>⚠</span>
-                <div className={styles.errorBody}>
-                  <p className={styles.errorTitle}>Something went wrong</p>
-                  <p className={styles.errorMsg}>{error}</p>
-                </div>
-                <button onClick={() => setError('')} className={styles.errorClose}>
-                  ×
-                </button>
               </div>
             )}
 
@@ -580,6 +587,20 @@ export default function Home() {
             )}
 
             <h1 className={styles.heading}>Upload your source material</h1>
+
+            {/* P3 — error banner anchored directly above the textarea that caused it */}
+            {error && (
+              <div className={styles.error}>
+                <span className={styles.errorIcon}>⚠</span>
+                <div className={styles.errorBody}>
+                  <p className={styles.errorTitle}>Something went wrong</p>
+                  <p className={styles.errorMsg}>{error}</p>
+                </div>
+                <button onClick={() => setError('')} className={styles.errorClose}>
+                  ×
+                </button>
+              </div>
+            )}
 
             <textarea
               className={styles.textarea}
@@ -637,11 +658,21 @@ export default function Home() {
               <button
                 onClick={handleGenerate}
                 disabled={!sourceText.trim() || state === 'generating' || wordLimitExceeded}
-                className={styles.btnPrimary}
+                className={[styles.btnPrimary, generateIdle ? styles.btnPrimaryIdle : '']
+                  .filter(Boolean)
+                  .join(' ')}
               >
                 {state === 'generating' ? 'Generating…' : 'Generate cards →'}
               </button>
             </div>
+
+            {/* P2 — explicit reason the Generate button is disabled when over the limit */}
+            {state === 'upload' && wordLimitExceeded && (
+              <p className={styles.limitNotice}>
+                {(wordCount - wordLimit).toLocaleString()} word
+                {wordCount - wordLimit !== 1 ? 's' : ''} over the limit — shorten your text to continue.
+              </p>
+            )}
 
             {state === 'generating' && (
               <div className={styles.processView}>
@@ -757,6 +788,7 @@ export default function Home() {
                   ) : (
                     <div className={styles.cardContent}>
                       <div className={styles.cardFront} onClick={() => startEditing(i)}>
+                        <span className={styles.cardNumber}>{String(i + 1).padStart(2, '0')}</span>
                         <p
                           className={styles.cardTextContent}
                           dangerouslySetInnerHTML={{
@@ -776,7 +808,7 @@ export default function Home() {
                               : '+ Additional fact'}
                           </p>
                         )}
-                        <p className={styles.cardHint}>Click to edit</p>
+                        <span className={styles.cardHint}>Edit</span>
                       </div>
                       <button
                         onClick={() => toggleCard(i)}
@@ -827,9 +859,26 @@ export default function Home() {
 
                 <div className={styles.aiMessages}>
                   {aiMessages.length === 0 && !aiLoading && (
-                    <p className={styles.aiEmptyState}>
-                      Ask about any card or concept in your source material.
-                    </p>
+                    <div className={styles.aiEmpty}>
+                      <p className={styles.aiEmptyState}>
+                        Ask about any card or concept in your source material.
+                      </p>
+                      <div className={styles.aiSuggestions}>
+                        {[
+                          'Explain card 1',
+                          'Give me a memory trick for this topic',
+                          "What's the broader context here?",
+                        ].map(q => (
+                          <button
+                            key={q}
+                            className={styles.aiSuggestion}
+                            onClick={() => handleAiSend(q)}
+                          >
+                            {q}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
                   )}
                   {aiMessages.map((msg, i) => (
                     <div
@@ -869,7 +918,7 @@ export default function Home() {
                     disabled={aiLoading}
                   />
                   <button
-                    onClick={handleAiSend}
+                    onClick={() => handleAiSend()}
                     disabled={!aiInput.trim() || aiLoading}
                     className={styles.aiSendBtn}
                   >
@@ -898,8 +947,20 @@ export default function Home() {
             <div className={styles.doneBox}>
               <h2 className={styles.doneTitle}>File downloaded</h2>
               <p className={styles.doneMsg}>
-                Open dimindo_export.apkg to import into Anki.
+                dimindo_export.apkg is ready to import into Anki.
               </p>
+              <ol className={styles.doneSteps}>
+                <li>Open Anki and choose <strong>File → Import</strong>.</li>
+                <li>Select <strong>dimindo_export.apkg</strong>.</li>
+              </ol>
+              <a
+                href="https://apps.ankiweb.net/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.doneSecondary}
+              >
+                New to Anki? Download it →
+              </a>
             </div>
             <button onClick={handleNewDeck} className={styles.resetBtn}>
               Generate new cards →
@@ -952,6 +1013,7 @@ export default function Home() {
               className={styles.sidebarToggle}
               onClick={() => setSidebarOpen(true)}
               aria-label="Open recent sessions"
+              data-tooltip="Recent sessions"
             >
               <SidebarIcon />
             </button>
