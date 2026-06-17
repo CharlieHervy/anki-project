@@ -475,7 +475,7 @@ export default function Home() {
     const refillSuffix = `${refill} Quick Refill generation${refill !== 1 ? 's' : ''} remaining`
 
     if (quota.plan === 'free') {
-      const base = `${quota.lifetime_used} of ${quota.lifetime_limit} lifetime generations used`
+      const base = `${quota.lifetime_remaining} free generation${quota.lifetime_remaining !== 1 ? 's' : ''} remaining`
       return refill > 0 ? `${base} · ${refillSuffix}` : base
     }
 
