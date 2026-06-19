@@ -586,14 +586,14 @@
 
 .cardTextContent strong {
   background: var(--cream);
-  padding: 1px 4px;
+  padding: 1px 2px;
   border-radius: 2px;
   font-weight: 500;
 }
 
 .cardExtra {
   font-size: 0.78rem;
-  color: var(--muted);
+  color: color-mix(in srgb, var(--ink) 40%, var(--muted));
   line-height: 1.55;
   border-top: 1px solid var(--cream);
   padding-top: 8px;
@@ -603,31 +603,36 @@
 .cardLogg {
   font-size: 0.75rem;
   color: #b07d28;
-  margin-top: 6px;
+  margin-top: 13px;
+  padding-left: 13px;
+  border-left: 1px solid var(--rule);
   line-height: 1.4;
 }
 
-/* BESLUT 1 — "EDIT" as a DM Mono eyebrow in the card foot. Fades in on hover,
-   right-aligned, --muted (same colour as the hover border → one cohesive unit). */
+/* O11 — in the rejected state the log de-chromatises along with the card:
+   gold → muted, so a rejected card carries no live accent. */
+.cardRejected .cardLogg {
+  color: var(--muted);
+}
+
+/* O10 — persistent edit affordance: a pencil icon in the card foot, always
+   visible so it works without hover (touch included). Clear grey at rest,
+   darkening to ink on hover. The inline SVG inherits this via currentColor. */
 .cardHint {
-  display: block;
-  text-align: right;
-  font-family: 'DM Mono', monospace;
-  font-size: 0.6rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+  display: flex;
+  justify-content: flex-end;
   color: var(--muted);
   margin-top: 10px;
-  opacity: 0;
-  transition: opacity 0.15s;
+  transition: color 0.15s;
 }
-.cardFront:hover .cardHint { opacity: 1; }
+.cardFront:hover .cardHint { color: var(--ink); }
 
-/* Approve button — B3: hover state added */
+/* Approve button — O9: lighter weight (28px) and an outline check rather than
+   a filled ink disc, so the control no longer outweighs the card content. */
 .approveBtn {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   border: 1px solid var(--rule);
   background: white;
@@ -642,8 +647,8 @@
 .approveBtn:hover { border-color: var(--muted); }
 .approveBtnOn {
   border-color: var(--ink);
-  background: var(--ink);
-  color: white;
+  background: white;
+  color: var(--ink);
 }
 
 /* ─────────────────────────────────────────────
@@ -682,7 +687,7 @@
   outline: none;
   transition: border-color 0.15s;
 }
-.fieldTextarea { resize: none; line-height: 1.6; }
+.fieldTextarea { resize: none; line-height: 1.6; min-height: 64px; overflow: hidden; }
 .fieldTextarea:focus,
 .fieldInput:focus { border-color: var(--ink); }
 

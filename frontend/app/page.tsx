@@ -55,6 +55,16 @@ function SidebarIcon() {
   )
 }
 
+// O5 — auto-grow helper for the edit textareas. DOM-only (no state/props), so
+// it is defined at module scope and stays referentially stable: as a ref
+// callback it sizes the field to its content on mount, and is called again
+// from onChange so the field grows as the user types.
+function autoResize(el: HTMLTextAreaElement | null) {
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${el.scrollHeight}px`
+}
+
 export default function Home() {
   const { user, isLoaded } = useUser()
   const { openSignIn } = useClerk()
@@ -762,8 +772,9 @@ export default function Home() {
                         <textarea
                           className={styles.fieldTextarea}
                           rows={3}
+                          ref={autoResize}
                           value={editText}
-                          onChange={e => setEditText(e.target.value)}
+                          onChange={e => { setEditText(e.target.value); autoResize(e.target) }}
                           autoFocus
                         />
                       </div>
@@ -772,8 +783,9 @@ export default function Home() {
                         <textarea
                           className={styles.fieldTextarea}
                           rows={2}
+                          ref={autoResize}
                           value={editExtra}
-                          onChange={e => setEditExtra(e.target.value)}
+                          onChange={e => { setEditExtra(e.target.value); autoResize(e.target) }}
                         />
                       </div>
                       <div className={styles.editActions}>
@@ -804,11 +816,16 @@ export default function Home() {
                         {card.logg.startsWith('CORRECTED:') || card.logg.startsWith('EXTERNAL:') ? (
                           <p className={styles.cardLogg}>
                             {card.logg.startsWith('CORRECTED:')
-                              ? '⚠ ' + card.logg.replace(/^CORRECTED: /, '')
+                              ? 'ⓘ ' + card.logg.replace(/^CORRECTED: /, '')
                               : '+ ' + card.logg.replace(/^EXTERNAL: /, '')}
                           </p>
                         ) : null}
-                        <span className={styles.cardHint}>Edit</span>
+                        <span className={styles.cardHint} aria-hidden="true">
+                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17z" />
+                            <path d="M13.5 6.5l3 3" />
+                          </svg>
+                        </span>
                       </div>
                       <button
                         onClick={() => toggleCard(i)}
