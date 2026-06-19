@@ -531,51 +531,119 @@
 .exportBtn:hover { background: #333; transform: translateY(-1px); }
 .exportBtn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
 
-/* ─────────────────────────────────────────────
-   Cards list
-───────────────────────────────────────────── */
+/* ═════════════════════════════════════════════
+   CARD COMPONENT
+   Zone-based structure: a beige shell (#ebe7dc) holds an always-visible
+   header strip plus up to three white content zones.
+     · Header strip — number chip, persistent edit pencil, approve toggle
+     · Zone 1 + 2 — shared white panel (cloze row + extra row, hairline split)
+     · Zone 3 — log: a separate white block, beige gap above it
+   The shell is shared by the review list and the streaming preview.
+═════════════════════════════════════════════ */
 .cardsList {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
+/* Card shell — the beige frame that carries structure + metadata. Content
+   lives only in the white zones inside it. */
 .card {
-  background: white;
+  background: #ebe7dc;
   border: 1px solid var(--rule);
-  border-radius: 4px;
-  padding: 20px 22px;
+  border-radius: 6px;
+  padding: 10px;
   transition: opacity 0.15s, border-color 0.15s;
 }
 
+/* Rejected — the whole card dims (header, zones and log together). */
 .cardRejected { opacity: 0.4; }
 
-/* BESLUT 1 — the card surface carries the edit affordance; hover lifts the
-   border toward --muted (calm, matches the EDIT eyebrow colour). Scoped to
-   the review list so streaming cards stay inert. */
+/* Hover lifts the shell border toward --muted. Scoped to the review list so
+   the streaming preview cards stay inert. */
 .cardsList .card:hover { border-color: var(--muted); }
 
-.cardContent {
+/* ── Header strip (always visible) ── */
+.cardHeader {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 2px 10px;
 }
 
-.cardFront {
-  flex: 1;
-  min-width: 0;
-  cursor: pointer;
-}
-
-/* P2 — discreet card numbering, mirrors the AI's "Card N" references */
+/* Card number — DM Mono chip on the beige shell. Mirrors the AI's "Card N". */
 .cardNumber {
-  display: block;
   font-family: 'DM Mono', monospace;
   font-size: 0.62rem;
   letter-spacing: 0.1em;
   color: var(--muted);
-  margin-bottom: 8px;
+  background: #f3f0e9;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 2px 6px;
+}
+
+/* Edit affordance — persistent (works on touch), not hover-gated. */
+.cardEditBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  background: #f3f0e9;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.cardEditBtn:hover { color: var(--ink); border-color: var(--muted); }
+
+/* Approve — Fork 2b: seated at the right of the header strip, in line with the
+   chips. Outline disc keeps its weight under the card content. Two states only:
+   on (ink ring + check) / off (empty). */
+.approveBtn {
+  margin-left: auto;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--rule);
+  background: white;
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  transition: border-color 0.15s, color 0.15s;
+}
+.approveBtn:hover { border-color: var(--muted); }
+.approveBtnOn {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+/* ── Zone 1 + Zone 2 — shared white panel ── */
+.cardPanel {
+  background: white;
+  border-radius: 4px;
+  overflow: hidden;
+}
+/* Clickable-to-edit variant (review only; the streaming preview is inert). */
+.cardPanelEditable { cursor: pointer; }
+
+/* Zone 1 (cloze). min-height keeps an emptied cloze reading as a deliberate
+   white band rather than collapsing. */
+.clozeZone {
+  box-sizing: border-box;
+  padding: 14px 16px;
+  min-height: 48px;
+}
+
+/* Zone 2 (extra). The hairline rule above is the cloze↔extra separator. */
+.extraZone {
+  padding: 11px 16px;
+  border-top: 1px solid var(--rule);
 }
 
 .cardTextContent {
@@ -591,68 +659,31 @@
   font-weight: 500;
 }
 
+/* Extra — typography only; the zone supplies padding and the hairline. */
 .cardExtra {
   font-size: 0.78rem;
   color: color-mix(in srgb, var(--ink) 40%, var(--muted));
   line-height: 1.55;
-  border-top: 1px solid var(--cream);
-  padding-top: 8px;
+}
+
+/* ── Zone 3 — log: separate white block, beige gap above. Gold, DM Mono,
+   never editable. De-chromatises to --muted when the card is rejected. ── */
+.loggZone {
+  background: white;
+  border-radius: 4px;
   margin-top: 8px;
+  padding: 10px 16px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--gold);
 }
-
-.cardLogg {
-  font-size: 0.75rem;
-  color: #b07d28;
-  margin-top: 13px;
-  padding-left: 13px;
-  border-left: 1px solid var(--rule);
-  line-height: 1.4;
-}
-
-/* O11 — in the rejected state the log de-chromatises along with the card:
-   gold → muted, so a rejected card carries no live accent. */
-.cardRejected .cardLogg {
-  color: var(--muted);
-}
-
-/* O10 — persistent edit affordance: a pencil icon in the card foot, always
-   visible so it works without hover (touch included). Clear grey at rest,
-   darkening to ink on hover. The inline SVG inherits this via currentColor. */
-.cardHint {
-  display: flex;
-  justify-content: flex-end;
-  color: var(--muted);
-  margin-top: 10px;
-  transition: color 0.15s;
-}
-.cardFront:hover .cardHint { color: var(--ink); }
-
-/* Approve button — O9: lighter weight (28px) and an outline check rather than
-   a filled ink disc, so the control no longer outweighs the card content. */
-.approveBtn {
-  flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
-  border: 1px solid var(--rule);
-  background: white;
-  color: var(--muted);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 0.875rem;
-  transition: border-color 0.15s, background 0.15s, color 0.15s;
-}
-.approveBtn:hover { border-color: var(--muted); }
-.approveBtnOn {
-  border-color: var(--ink);
-  background: white;
-  color: var(--ink);
-}
+.cardRejected .loggZone { color: var(--muted); }
 
 /* ─────────────────────────────────────────────
-   Edit form (inside card)
+   Edit form (inside the beige shell)
+   Each field is a DM Mono "header-remsa" label on the beige shell sitting
+   above its white auto-growing textarea — mirroring the display zones.
 ───────────────────────────────────────────── */
 .editForm {
   display: flex;
@@ -677,7 +708,7 @@
 .fieldTextarea,
 .fieldInput {
   width: 100%;
-  background: var(--paper);
+  background: white;
   border: 1px solid var(--rule);
   border-radius: 3px;
   padding: 8px 10px;

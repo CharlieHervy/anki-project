@@ -65,6 +65,35 @@ function autoResize(el: HTMLTextAreaElement | null) {
   el.style.height = `${el.scrollHeight}px`
 }
 
+// Pencil icon used as the persistent edit affordance in the card header strip.
+function PencilIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="14"
+      height="14"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17z" />
+      <path d="M13.5 6.5l3 3" />
+    </svg>
+  )
+}
+
+// Zone 3 (log) — formats the non-editable CORRECTED / EXTERNAL marking, or
+// returns null so the zone is omitted entirely when there is no marking.
+function loggDisplay(logg?: string): string | null {
+  if (!logg) return null
+  if (logg.startsWith('CORRECTED:')) return 'ⓘ ' + logg.replace(/^CORRECTED: /, '')
+  if (logg.startsWith('EXTERNAL:')) return '+ ' + logg.replace(/^EXTERNAL: /, '')
+  return null
+}
+
 export default function Home() {
   const { user, isLoaded } = useUser()
   const { openSignIn } = useClerk()
@@ -698,21 +727,47 @@ export default function Home() {
                   </span>
                 </div>
                 <div className={styles.streamCardsList}>
-                  {streamCards.map((card, i) => (
-                    <div key={card.id || i} className={styles.streamCard}>
-                      <div className={styles.card}>
-                        <p
-                          className={styles.cardTextContent}
-                          dangerouslySetInnerHTML={{
-                            __html: card.text.replace(/\{\{c1::(.*?)\}\}/g, '<strong>$1</strong>'),
-                          }}
-                        />
-                        {card.extra && (
-                          <p className={styles.cardExtra}>{card.extra}</p>
-                        )}
+                  {streamCards.map((card, i) => {
+                    const logg = loggDisplay(card.logg)
+                    const showPanel = !!(card.text?.trim() || card.extra?.trim())
+                    return (
+                      <div key={card.id || i} className={styles.streamCard}>
+                        {/* Card shell — same zone structure as the review cards,
+                            with a number-only header (pencil/approve are review
+                            interactions and would be inert mid-stream). */}
+                        <div className={styles.card}>
+                          <div className={styles.cardHeader}>
+                            <span className={styles.cardNumber}>
+                              {String(i + 1).padStart(2, '0')}
+                            </span>
+                          </div>
+
+                          {showPanel && (
+                            <div className={styles.cardPanel}>
+                              <div className={styles.clozeZone}>
+                                <p
+                                  className={styles.cardTextContent}
+                                  dangerouslySetInnerHTML={{
+                                    __html: (card.text || '').replace(
+                                      /\{\{c1::(.*?)\}\}/g,
+                                      '<strong>$1</strong>'
+                                    ),
+                                  }}
+                                />
+                              </div>
+                              {card.extra?.trim() && (
+                                <div className={styles.extraZone}>
+                                  <p className={styles.cardExtra}>{card.extra}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {logg && <div className={styles.loggZone}>{logg}</div>}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )}
@@ -760,83 +815,106 @@ export default function Home() {
             )}
 
             <div className={styles.cardsList}>
-              {cards.map((card, i) => (
-                <div
-                  key={i}
-                  className={`${styles.card}${!card.approved ? ` ${styles.cardRejected}` : ''}`}
-                >
-                  {editingIndex === i ? (
-                    <div className={styles.editForm}>
-                      <div className={styles.fieldGroup}>
-                        <label className={styles.fieldLabel}>Text</label>
-                        <textarea
-                          className={styles.fieldTextarea}
-                          rows={3}
-                          ref={autoResize}
-                          value={editText}
-                          onChange={e => { setEditText(e.target.value); autoResize(e.target) }}
-                          autoFocus
-                        />
+              {cards.map((card, i) => {
+                const logg = loggDisplay(card.logg)
+                // Zone 1 stays visible whenever either field has content — so an
+                // emptied cloze with surviving extra keeps both zones (the cloze
+                // zone simply renders as an empty band). Hidden only when both
+                // fields are empty.
+                const showPanel = !!(card.text.trim() || card.extra.trim())
+                return (
+                  <div
+                    key={i}
+                    className={`${styles.card}${!card.approved ? ` ${styles.cardRejected}` : ''}`}
+                  >
+                    {editingIndex === i ? (
+                      <div className={styles.editForm}>
+                        <div className={styles.fieldGroup}>
+                          <label className={styles.fieldLabel}>Cloze text</label>
+                          <textarea
+                            className={styles.fieldTextarea}
+                            rows={3}
+                            ref={autoResize}
+                            value={editText}
+                            onChange={e => { setEditText(e.target.value); autoResize(e.target) }}
+                            autoFocus
+                          />
+                        </div>
+                        <div className={styles.fieldGroup}>
+                          <label className={styles.fieldLabel}>Back extra</label>
+                          <textarea
+                            className={styles.fieldTextarea}
+                            rows={2}
+                            ref={autoResize}
+                            value={editExtra}
+                            onChange={e => { setEditExtra(e.target.value); autoResize(e.target) }}
+                          />
+                        </div>
+                        <div className={styles.editActions}>
+                          <button onClick={cancelEdit} className={styles.btnSmallGhost}>
+                            Cancel
+                          </button>
+                          <button onClick={() => saveEdit(i)} className={styles.btnSmallDark}>
+                            Save
+                          </button>
+                        </div>
                       </div>
-                      <div className={styles.fieldGroup}>
-                        <label className={styles.fieldLabel}>Extra</label>
-                        <textarea
-                          className={styles.fieldTextarea}
-                          rows={2}
-                          ref={autoResize}
-                          value={editExtra}
-                          onChange={e => { setEditExtra(e.target.value); autoResize(e.target) }}
-                        />
-                      </div>
-                      <div className={styles.editActions}>
-                        <button onClick={cancelEdit} className={styles.btnSmallGhost}>
-                          Cancel
-                        </button>
-                        <button onClick={() => saveEdit(i)} className={styles.btnSmallDark}>
-                          Save
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className={styles.cardContent}>
-                      <div className={styles.cardFront} onClick={() => startEditing(i)}>
-                        <span className={styles.cardNumber}>{String(i + 1).padStart(2, '0')}</span>
-                        <p
-                          className={styles.cardTextContent}
-                          dangerouslySetInnerHTML={{
-                            __html: card.text.replace(
-                              /\{\{c1::(.*?)\}\}/g,
-                              '<strong>$1</strong>'
-                            ),
-                          }}
-                        />
-                        {card.extra && (
-                          <p className={styles.cardExtra}>{card.extra}</p>
+                    ) : (
+                      <>
+                        {/* Header strip — always visible: number, persistent
+                            edit pencil, approve toggle (Fork 2b, right-aligned). */}
+                        <div className={styles.cardHeader}>
+                          <span className={styles.cardNumber}>
+                            {String(i + 1).padStart(2, '0')}
+                          </span>
+                          <button
+                            className={styles.cardEditBtn}
+                            onClick={() => startEditing(i)}
+                            aria-label="Edit card"
+                          >
+                            <PencilIcon />
+                          </button>
+                          <button
+                            onClick={() => toggleCard(i)}
+                            className={`${styles.approveBtn}${card.approved ? ` ${styles.approveBtnOn}` : ''}`}
+                            aria-label={card.approved ? 'Approved, click to reject' : 'Rejected, click to approve'}
+                          >
+                            {card.approved ? '✓' : ''}
+                          </button>
+                        </div>
+
+                        {/* Zone 1 + Zone 2 — shared white panel, hairline between */}
+                        {showPanel && (
+                          <div
+                            className={`${styles.cardPanel} ${styles.cardPanelEditable}`}
+                            onClick={() => startEditing(i)}
+                          >
+                            <div className={styles.clozeZone}>
+                              <p
+                                className={styles.cardTextContent}
+                                dangerouslySetInnerHTML={{
+                                  __html: (card.text || '').replace(
+                                    /\{\{c1::(.*?)\}\}/g,
+                                    '<strong>$1</strong>'
+                                  ),
+                                }}
+                              />
+                            </div>
+                            {card.extra.trim() && (
+                              <div className={styles.extraZone}>
+                                <p className={styles.cardExtra}>{card.extra}</p>
+                              </div>
+                            )}
+                          </div>
                         )}
-                        {card.logg.startsWith('CORRECTED:') || card.logg.startsWith('EXTERNAL:') ? (
-                          <p className={styles.cardLogg}>
-                            {card.logg.startsWith('CORRECTED:')
-                              ? 'ⓘ ' + card.logg.replace(/^CORRECTED: /, '')
-                              : '+ ' + card.logg.replace(/^EXTERNAL: /, '')}
-                          </p>
-                        ) : null}
-                        <span className={styles.cardHint} aria-hidden="true">
-                          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M4 20h4L18.5 9.5a2.1 2.1 0 0 0-3-3L5 17z" />
-                            <path d="M13.5 6.5l3 3" />
-                          </svg>
-                        </span>
-                      </div>
-                      <button
-                        onClick={() => toggleCard(i)}
-                        className={`${styles.approveBtn}${card.approved ? ` ${styles.approveBtnOn}` : ''}`}
-                      >
-                        {card.approved ? '✓' : ''}
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
+
+                        {/* Zone 3 — log: separate block, never editable */}
+                        {logg && <div className={styles.loggZone}>{logg}</div>}
+                      </>
+                    )}
+                  </div>
+                )
+              })}
             </div>
 
             <div className={styles.exportActions}>
