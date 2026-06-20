@@ -578,7 +578,15 @@ export default function Home() {
       <header className={styles.topbar}>
         <span className={styles.wordmark}>Dimindo</span>
         <div className={styles.topbarRight}>
-          <UserButton />
+          <UserButton
+            appearance={{
+              variables: {
+                colorPrimary: '#8a8478',
+                colorTextOnPrimaryBackground: '#ffffff',
+              },
+            }}
+          />
+
         </div>
       </header>
 
