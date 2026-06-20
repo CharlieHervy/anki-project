@@ -755,11 +755,54 @@
 }
 .btnSmallDark:hover { background: #333; }
 
+/* Bottom export row — deck-name field (left, grows) + export button (right).
+   The top reviewHeader export button is unaffected. align-items:flex-end keeps
+   the button level with the input's baseline as the input wraps to two lines. */
 .exportActions {
   display: flex;
-  justify-content: flex-end;
+  align-items: flex-end;
+  gap: 12px;
   margin-top: 16px;
 }
+.exportActions .exportBtn { flex-shrink: 0; }
+
+/* Deck-name field group — label over an auto-growing textarea. */
+.deckField {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.deckFieldLabel {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* Single-line-by-meaning, but allowed to wrap visually for long hierarchical
+   names (e.g. "Main::SO::…"). Newlines are stripped in the handler. */
+.deckInput {
+  width: 100%;
+  box-sizing: border-box;
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 9px 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.875rem;
+  color: var(--ink);
+  line-height: 1.5;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.deckInput:focus { border-color: var(--ink); }
+.deckInput::placeholder { color: var(--muted); }
 
 /* ─────────────────────────────────────────────
    Exporting state

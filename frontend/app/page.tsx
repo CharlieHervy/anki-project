@@ -113,6 +113,7 @@ export default function Home() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editText, setEditText] = useState('')
   const [editExtra, setEditExtra] = useState('')
+  const [deckName, setDeckName] = useState('')
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [language, setLanguage] = useState('English')
@@ -177,7 +178,11 @@ export default function Home() {
     })
       .then(r => r.json())
       .then(data => {
-        setCards(data.cards ?? [])
+        const loaded = data.cards ?? []
+        setCards(loaded)
+        // Pre-fill the deck name from the loaded session so the field reflects
+        // the stored name (avoids an empty field overwriting it on blur).
+        setDeckName(loaded[0]?.deck ?? '')
         setSessionId(sid)
         setState('review')
         fetch(`${API}/api/sessions/${sid}/source`, {
@@ -411,8 +416,31 @@ export default function Home() {
     }
   }
 
+  // Apply the deck name to every card in the session. The value is persisted
+  // through the existing content-PATCH (the backend accepts a `deck` field), so
+  // the export contract stays untouched — export reads card.deck server-side.
+  // An empty name writes '' to all cards, so export then carries no deck name
+  // (no fallback, no blocking), exactly as specified.
+  async function applyDeckName(name: string) {
+    if (!sessionId || cards.length === 0) return
+    const updated = cards.map(c => ({ ...c, deck: name }))
+    setCards(updated)
+    await Promise.all(
+      updated.map(card =>
+        fetch(`${API}/api/cards/${sessionId}/${card.id}/content`, {
+          method: 'PATCH',
+          headers: { ...authHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: card.text, extra: card.extra, deck: name }),
+        })
+      )
+    )
+  }
+
   // --- Export to .apkg ---
   async function handleExport() {
+    // Persist the latest deck name first — covers the case where the field
+    // still has focus and its onBlur write hasn't fired yet.
+    await applyDeckName(deckName)
     setState('exporting')
     const res = await fetch(`${API}/api/export/${sessionId}`, {
       method: 'POST',
@@ -462,6 +490,7 @@ export default function Home() {
     setSourceMaterial(null)
     setShowSource(false)
     setSessionId('')
+    setDeckName('')
     setAiOpen(false)
     setAiMessages([])
     setAiInput('')
@@ -918,6 +947,31 @@ export default function Home() {
             </div>
 
             <div className={styles.exportActions}>
+              <div className={styles.deckField}>
+                <label htmlFor="deck-name" className={styles.deckFieldLabel}>
+                  Anki deck name
+                </label>
+                <textarea
+                  id="deck-name"
+                  className={styles.deckInput}
+                  rows={1}
+                  ref={autoResize}
+                  value={deckName}
+                  onChange={e => {
+                    // A deck name is logically one line — strip any newlines
+                    // (e.g. from a paste) so the field can wrap visually but
+                    // never carry a literal line break.
+                    const cleaned = e.target.value.replace(/[\r\n]+/g, '')
+                    setDeckName(cleaned)
+                    autoResize(e.target)
+                  }}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') e.preventDefault()
+                  }}
+                  onBlur={() => applyDeckName(deckName)}
+                  placeholder="e.g. History — World War II"
+                />
+              </div>
               <button
                 onClick={handleExport}
                 disabled={approvedCount === 0}
