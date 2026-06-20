@@ -53,6 +53,25 @@
 }
 .topbarLink:hover { color: var(--ink); }
 
+/* Custom account trigger — replaces Clerk's UserButton avatar so the
+   silhouette colour can be driven by our own tokens (--muted / --ink).
+   Clicking still opens the Clerk profile via openUserProfile(). */
+.accountBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  background: white;
+  border: 1px solid var(--rule);
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.accountBtn:hover { border-color: var(--ink); }
+
 /* ─────────────────────────────────────────────
    Content block
 ───────────────────────────────────────────── */
@@ -1355,25 +1374,3 @@
   transition: opacity 0.15s;
 }
 .sidebarToggle:hover::after { opacity: 1; }
-
-/* ─────────────────────────────────────────────
-   Account button (custom Clerk trigger)
-───────────────────────────────────────────── */
-.accountBtn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid var(--rule);
-  background: var(--paper);
-  color: var(--muted);
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: border-color 0.15s, color 0.15s;
-}
-.accountBtn:hover {
-  border-color: var(--ink);
-  color: var(--ink);
-}

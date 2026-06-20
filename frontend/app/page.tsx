@@ -55,22 +55,6 @@ function SidebarIcon() {
   )
 }
 
-function AccountButton() {
-  const { openUserProfile } = useClerk()
-  return (
-    <button
-      onClick={() => openUserProfile()}
-      aria-label="Account"
-      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'var(--ink)' }}
-    >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <circle cx="12" cy="7" r="4" />
-        <path d="M4 21c0-4.418 3.582-8 8-8s8 3.582 8 8H4z" />
-      </svg>
-    </button>
-  )
-}
-
 // O5 — auto-grow helper for the edit textareas. DOM-only (no state/props), so
 // it is defined at module scope and stays referentially stable: as a ref
 // callback it sizes the field to its content on mount, and is called again
@@ -112,7 +96,7 @@ function loggDisplay(logg?: string): string | null {
 
 export default function Home() {
   const { user, isLoaded } = useUser()
-  const { openSignIn } = useClerk()
+  const { openSignIn, openUserProfile } = useClerk()
 
   const authHeaders = {
     'x-user-id': user?.id || 'anonymous_user',
@@ -593,7 +577,28 @@ export default function Home() {
       <header className={styles.topbar}>
         <span className={styles.wordmark}>Dimindo</span>
         <div className={styles.topbarRight}>
-          <AccountButton />
+          {user && (
+            <button
+              className={styles.accountBtn}
+              onClick={() => openUserProfile()}
+              aria-label="Account"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                width="16"
+                height="16"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <circle cx="12" cy="8" r="3.75" />
+                <path d="M5.5 19.5a6.5 6.5 0 0 1 13 0" />
+              </svg>
+            </button>
+          )}
         </div>
       </header>
 
