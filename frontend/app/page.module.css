@@ -63,15 +63,15 @@
   width: 32px;
   height: 32px;
   padding: 0;
-  background: none;
-  border: none;
-  color: #8a8478;
+  border-radius: 50%;
+  background: white !important;
+  border: 1px solid var(--rule) !important;
+  color: var(--muted);
   cursor: pointer;
-  transition: color 0.15s;
+  transition: border-color 0.15s;
 }
-.accountBtn:hover {
-  color: #0d0d0d;
-}
+.accountBtn:hover { border-color: var(--ink); }
+
 /* ─────────────────────────────────────────────
    Content block
 ───────────────────────────────────────────── */
