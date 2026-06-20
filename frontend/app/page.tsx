@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { UserButton, useUser, useClerk } from '@clerk/nextjs'
+import { useUser, useClerk } from '@clerk/nextjs'
 import ReactMarkdown from 'react-markdown'
 import styles from './page.module.css'
 
@@ -52,6 +52,22 @@ function SidebarIcon() {
       <rect x="6.5" y="0" width="8.5" height="5.5" rx="1" />
       <rect x="6.5" y="8.5" width="8.5" height="5.5" rx="1" />
     </svg>
+  )
+}
+
+function AccountButton() {
+  const { openUserProfile } = useClerk()
+  return (
+    <button
+      onClick={() => openUserProfile()}
+      aria-label="Account"
+      style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', color: 'var(--ink)' }}
+    >
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+        <circle cx="12" cy="7" r="4" />
+        <path d="M4 21c0-4.418 3.582-8 8-8s8 3.582 8 8H4z" />
+      </svg>
+    </button>
   )
 }
 
@@ -182,8 +198,7 @@ export default function Home() {
         setCards(loaded)
         // Pre-fill the deck name from the loaded session so the field reflects
         // the stored name (avoids an empty field overwriting it on blur).
-        const storedDeck = loaded[0]?.deck ?? ''
-        setDeckName(storedDeck === 'Huvudmeny' ? '' : storedDeck)
+        setDeckName(loaded[0]?.deck ?? '')
         setSessionId(sid)
         setState('review')
         fetch(`${API}/api/sessions/${sid}/source`, {
@@ -578,15 +593,7 @@ export default function Home() {
       <header className={styles.topbar}>
         <span className={styles.wordmark}>Dimindo</span>
         <div className={styles.topbarRight}>
-          <UserButton
-            appearance={{
-              variables: {
-                colorPrimary: '#8a8478',
-                colorTextOnPrimaryBackground: '#ffffff',
-              },
-            }}
-          />
-
+          <AccountButton />
         </div>
       </header>
 
