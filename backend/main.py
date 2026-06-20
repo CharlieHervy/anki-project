@@ -230,7 +230,7 @@ async def generate(
                         text=card.get('text', ''),
                         extra=card.get('extra', ''),
                         tags=card.get('tags', ''),
-                        deck=card.get('deck', 'Huvudmeny'),
+                        deck=card.get('deck', ''),
                         logg=card.get('logg', ''),
                         approved=True
                     )
