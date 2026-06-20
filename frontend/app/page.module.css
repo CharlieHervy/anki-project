@@ -63,15 +63,13 @@
   width: 32px;
   height: 32px;
   padding: 0;
-  border-radius: 50%;
-  background: #ffffff;
-  border: 1px solid #d8d3c8;
+  background: none;
+  border: none;
   color: #8a8478;
   cursor: pointer;
-  transition: border-color 0.15s, color 0.15s;
+  transition: color 0.15s;
 }
 .accountBtn:hover {
-  border-color: #0d0d0d;
   color: #0d0d0d;
 }
 /* ─────────────────────────────────────────────
