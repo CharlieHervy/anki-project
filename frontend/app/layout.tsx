@@ -4,7 +4,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'Dimindo',
-  description: 'AI-genererade Anki-kort från ditt källmaterial',
+  description: 'AI-generated Anki flashcards from your study material',
 }
 
 export default function RootLayout({
@@ -13,7 +13,15 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <ClerkProvider>
+    <ClerkProvider
+      localization={{
+        signIn: {
+          start: {
+            subtitle: "Create an account or sign in to continue"
+          }
+        }
+      }}
+    >
       <html lang="sv">
         <body>{children}</body>
       </html>
