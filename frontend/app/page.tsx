@@ -577,6 +577,17 @@ export default function Home() {
       <header className={styles.topbar}>
         <span className={styles.wordmark}>Dimindo</span>
         <div className={styles.topbarRight}>
+          {/* Sign in — shown only once Clerk has loaded and there is no user,
+              so it never flickers in during the initial session resolution.
+              Mutually exclusive with the account icon below (user is null here). */}
+          {isLoaded && !user && (
+            <button
+              className={styles.signInBtn}
+              onClick={() => openSignIn()}
+            >
+              Sign in
+            </button>
+          )}
           {user && (
             <button
               className={styles.accountBtn}

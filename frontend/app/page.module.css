@@ -72,6 +72,24 @@
 }
 .accountBtn:hover { border-color: var(--ink); }
 
+/* Sign in — shown to logged-out users in the same slot as the account icon.
+   Compact so it stays within the navbar's 32px content band (matching the
+   icon's height), keeping the bar locked at 68px in both states.
+   --ink = #0d0d0d, --rule = #d8d3c8 (the spec's colours, via tokens). */
+.signInBtn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 6px 16px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.signInBtn:hover { border-color: var(--ink); }
+
 /* ─────────────────────────────────────────────
    Content block
 ───────────────────────────────────────────── */
