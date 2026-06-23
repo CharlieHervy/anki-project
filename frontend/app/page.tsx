@@ -127,6 +127,10 @@ export default function Home() {
   const [sourceMaterial, setSourceMaterial] = useState<string | null>(null)
   const [showSource, setShowSource] = useState(false)
 
+  // One-time educational modal: shown the first time a Pro user generates with
+  // text over 3,000 words (a 2–3 pool-generation upload). Gated by localStorage.
+  const [showMultiGenModal, setShowMultiGenModal] = useState(false)
+
   // ── AI Chat state ──────────────────────────────────────
   const [aiOpen, setAiOpen] = useState(false)
   const [aiMessages, setAiMessages] = useState<AiMessage[]>([])
@@ -237,6 +241,10 @@ export default function Home() {
   }
 
   // --- Card Generation with SSE Streaming ---
+  // handleGenerate runs the guards (auth, then the one-time multi-generation
+  // education gate for Pro). runGeneration holds the actual streaming flow, so
+  // the modal's "Confirm & Generate" can re-enter it directly without re-running
+  // the guards.
   async function handleGenerate() {
     if (!sourceText.trim()) return
     if (!user) {
@@ -244,6 +252,30 @@ export default function Home() {
       openSignIn()
       return
     }
+
+    // One-time educational modal — first time a Pro user generates with text
+    // over 3,000 words (i.e. an upload that costs 2 or 3 pool generations).
+    // Once seen, the localStorage flag suppresses it for good, on any device
+    // this browser keeps.
+    if (quota?.plan === 'pro' && wordCount > 3000) {
+      let seen = false
+      try {
+        seen = !!localStorage.getItem('dimindo_multi_gen_educated')
+      } catch {
+        seen = false
+      }
+      if (!seen) {
+        setShowMultiGenModal(true)
+        return
+      }
+    }
+
+    await runGeneration()
+  }
+
+  // The actual generation + SSE streaming flow. Entered from handleGenerate
+  // (gate cleared) or from the modal's Confirm button.
+  async function runGeneration() {
     setState('generating')
     setStreamCards([])
     setStreamDone(false)
@@ -324,6 +356,27 @@ export default function Home() {
       setState('upload')
       console.error(err)
     }
+  }
+
+  // Multi-generation education modal — both buttons mark it as "seen" so it
+  // never appears again, regardless of which one the user picks (per spec).
+  function confirmMultiGen() {
+    try {
+      localStorage.setItem('dimindo_multi_gen_educated', '1')
+    } catch {
+      // storage unavailable (private mode, disabled) — proceed anyway
+    }
+    setShowMultiGenModal(false)
+    runGeneration()
+  }
+
+  function dismissMultiGen() {
+    try {
+      localStorage.setItem('dimindo_multi_gen_educated', '1')
+    } catch {
+      // ignore — flag is best-effort
+    }
+    setShowMultiGenModal(false)
   }
 
   // --- AI Chat ---
@@ -492,42 +545,92 @@ export default function Home() {
     setShowSource(false)
     setSessionId('')
     setDeckName('')
+    setShowMultiGenModal(false)
     setAiOpen(false)
     setAiMessages([])
     setAiInput('')
     setAiLoading(false)
   }
 
-  // Word count helpers
+  // ── Word count + quota-aware limit ─────────────────────
   const wordCount = sourceText.trim() === ''
     ? 0
     : sourceText.trim().split(/\s+/).filter(Boolean).length
-  const wordLimit = quota?.plan === 'pro' ? 9000 : 1000
-  const wordLimitExceeded = !!user && !!quota && wordCount > wordLimit
+
+  // Effective per-upload word ceiling, derived from the live quota:
+  //   Free, no Quick Refill      → 2,000
+  //   Free + Quick Refill        → 3,000  (QR allows 3,000 on any plan)
+  //   Pro, monthly pool left     → 9,000
+  //   Pro, pool empty + QR       → 3,000  (QR upload, capped at 3,000)
+  //   Pro, pool empty + no QR    → 9,000  (nominal — the quota wall takes over)
+  // Returns null while quota is still loading, so the counter degrades to a
+  // neutral placeholder rather than flashing a wrong limit.
+  function effectiveWordLimit(): number | null {
+    if (!quota) return null
+    if (quota.plan === 'pro') {
+      if (quota.monthly_remaining > 0) return 9000
+      return quota.quick_refill_remaining > 0 ? 3000 : 9000
+    }
+    return quota.quick_refill_remaining > 0 ? 3000 : 2000
+  }
+
+  // Pro-only: monthly-pool generations an upload of this size consumes. QR
+  // uploads always cost exactly 1 credit, but they are capped at 3,000 words,
+  // so this never mis-reports in QR mode (≤3,000 → 1).
+  function generationCost(words: number): 1 | 2 | 3 {
+    if (words <= 3000) return 1
+    if (words <= 6000) return 2
+    return 3
+  }
+
+  const wordLimit = effectiveWordLimit()
+  const wordLimitExceeded = !!user && wordLimit !== null && wordCount > wordLimit
+  const wordLimitOver = wordLimit !== null ? wordCount - wordLimit : 0
 
   // P1b — idle "awaiting input" styling applies only when the textarea is
   // empty (not while generating, not when over the word limit).
   const generateIdle = state === 'upload' && sourceText.trim() === ''
 
   function wordCountColor(): string {
+    if (wordLimit === null) return 'var(--muted)'
     const pct = wordCount / wordLimit
     if (pct > 1) return '#b04a2a'
     if (pct >= 0.9) return 'var(--gold)'
     return 'var(--muted)'
   }
 
+  // Word counter — count / effective limit. Generation cost has moved to its
+  // own line (generationCostDisplay), so this stays a pure "words" metric.
+  // en-US locale forces comma grouping regardless of the browser locale, so it
+  // always reads "1,847 / 2,000" in the English product.
   function wordCountDisplay(): string | null {
-    if (!user || !quota || wordCount === 0) return null
-    if (quota.plan !== 'pro') {
-      return `${wordCount.toLocaleString()} / 1,000 words`
+    if (!user || !quota || wordLimit === null || wordCount === 0) return null
+    return `${wordCount.toLocaleString('en-US')} / ${wordLimit.toLocaleString('en-US')} words`
+  }
+
+  // Muted sub-line under the counter: when/that Quick Refill applies.
+  function quotaSuffix(): string | null {
+    if (!quota) return null
+    if (quota.plan === 'free' && quota.quick_refill_remaining > 0) {
+      return 'Quick Refill activates after 2,000'
     }
-    if (wordCount <= 3000) {
-      return `${wordCount.toLocaleString()} / 3,000 words · 1 generation`
+    if (
+      quota.plan === 'pro' &&
+      quota.monthly_remaining === 0 &&
+      quota.quick_refill_remaining > 0
+    ) {
+      return 'Quick Refill active'
     }
-    if (wordCount <= 6000) {
-      return `${wordCount.toLocaleString()} words · 2 generations`
-    }
-    return `${wordCount.toLocaleString()} words · 3 generations`
+    return null
+  }
+
+  // Pro-only real-time generation-cost line, shown above the word counter.
+  function generationCostDisplay(): string | null {
+    if (!quota || quota.plan !== 'pro' || wordCount === 0) return null
+    const cost = generationCost(wordCount)
+    if (cost === 1) return '1 generation'
+    if (cost === 2) return '2 generations · longer text'
+    return '3 generations · full analysis'
   }
 
   // Quota indicator helpers
@@ -595,7 +698,7 @@ export default function Home() {
                 {quotaExceededReason === 'monthly_quota_exceeded' ? (
                   <>
                     <p className={styles.quotaErrorTitle}>
-                      You've used all generations for this month.
+                      You&apos;ve used all generations for this month.
                     </p>
                     <p className={styles.quotaErrorSub}>
                       Buy a Quick Refill to continue.
@@ -614,7 +717,7 @@ export default function Home() {
                 ) : (
                   <>
                     <p className={styles.quotaErrorTitle}>
-                      You've used all 3 lifetime generations.
+                      You&apos;ve used all 3 lifetime generations.
                     </p>
                     <p className={styles.quotaErrorSub}>
                       Upgrade to Pro or buy a Quick Refill.
@@ -675,13 +778,30 @@ export default function Home() {
               autoFocus
             />
 
-            {state === 'upload' && user && quota && wordCountDisplay() && (
-              <p
-                className={styles.wordCounter}
-                style={{ color: wordCountColor() }}
-              >
-                {wordCountDisplay()}
-              </p>
+            {/* Counter stack — generation cost (Pro, top) · count/limit · QR
+                suffix (bottom). While quota is still loading we show a neutral
+                placeholder so a wrong limit never flashes in. */}
+            {state === 'upload' && user && wordCount > 0 && (
+              <div className={styles.counterStack}>
+                {generationCostDisplay() && (
+                  <p className={styles.counterMeta}>{generationCostDisplay()}</p>
+                )}
+                {quota ? (
+                  <>
+                    <p
+                      className={styles.wordCounter}
+                      style={{ color: wordCountColor() }}
+                    >
+                      {wordCountDisplay()}
+                    </p>
+                    {quotaSuffix() && (
+                      <p className={styles.counterMeta}>{quotaSuffix()}</p>
+                    )}
+                  </>
+                ) : (
+                  <p className={styles.counterPlaceholder}>— / — words</p>
+                )}
+              </div>
             )}
 
             {state === 'upload' && (
@@ -733,8 +853,8 @@ export default function Home() {
             {/* P2 — explicit reason the Generate button is disabled when over the limit */}
             {state === 'upload' && wordLimitExceeded && (
               <p className={styles.limitNotice}>
-                {(wordCount - wordLimit).toLocaleString()} word
-                {wordCount - wordLimit !== 1 ? 's' : ''} over the limit — shorten your text to continue.
+                {wordLimitOver.toLocaleString('en-US')} word
+                {wordLimitOver !== 1 ? 's' : ''} over the limit — shorten your text to continue.
               </p>
             )}
 
@@ -1114,6 +1234,39 @@ export default function Home() {
         )}
 
       </div>
+
+      {/* ══════════════════════════════════
+          Multi-generation education modal (Pro · >3,000 words · once)
+      ══════════════════════════════════ */}
+      {showMultiGenModal && quota?.plan === 'pro' && (
+        <div className={styles.modalOverlay} role="presentation">
+          <div
+            className={styles.modal}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="multigen-title"
+          >
+            <h2 id="multigen-title" className={styles.modalTitle}>
+              Advanced analysis
+            </h2>
+            <p className={styles.modalBody}>
+              Your text is {wordCount.toLocaleString('en-US')} words. To thoroughly
+              analyze all your material and generate high-quality flashcards, this
+              will use {generationCost(wordCount)} of your monthly generations. You
+              have {quota.monthly_remaining} generation
+              {quota.monthly_remaining !== 1 ? 's' : ''} remaining this period.
+            </p>
+            <div className={styles.modalActions}>
+              <button onClick={dismissMultiGen} className={styles.modalBtnGhost}>
+                Shorten text
+              </button>
+              <button onClick={confirmMultiGen} className={styles.modalBtnSolid}>
+                Confirm &amp; Generate →
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Sidebar Drawer ── */}
       {user && (

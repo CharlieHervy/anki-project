@@ -3,6 +3,7 @@ import uuid
 import json
 import tempfile
 import stripe
+from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client, Client
 
@@ -62,11 +63,44 @@ async def preflight_handler(request: Request, rest_of_path: str):
 def count_words(text: str) -> int:
     return len(text.split())
 
-def validate_input_length(word_count: int, plan: str) -> tuple[bool, str]:
-    if plan == 'free' and word_count > 1000:
-        return False, f"Free plan supports up to 1,000 words. Your text has {word_count} words."
-    if word_count > 9000:
-        return False, f"Maximum input is 9,000 words. Your text has {word_count} words."
+def validate_input_length(word_count: int, plan: str, qr_remaining: int = 0) -> tuple[bool, str]:
+    """
+    Validerar inputlängd mot plan och Quick Refill-status.
+
+    - free utan QR-krediter:  max 2 000 ord
+    - free med QR-krediter:   max 3 000 ord (QR-poolens tak)
+    - pro:                    max 9 000 ord
+    - okänd plan:             strängaste taket (2 000 ord) som säkerhetsnät
+    """
+    if plan == 'free':
+        if qr_remaining > 0:
+            if word_count > 3000:
+                return False, (
+                    f"With Quick Refill credits, the Free plan supports up to 3,000 words. "
+                    f"Your text has {word_count} words."
+                )
+        else:
+            if word_count > 2000:
+                return False, (
+                    f"The Free plan supports up to 2,000 words. "
+                    f"Your text has {word_count} words."
+                )
+        return True, ""
+
+    if plan == 'pro':
+        if word_count > 9000:
+            return False, (
+                f"The Pro plan supports up to 9,000 words. "
+                f"Your text has {word_count} words."
+            )
+        return True, ""
+
+    # Okänd plan — fall tillbaka till strängaste taket
+    if word_count > 2000:
+        return False, (
+            f"This plan supports up to 2,000 words. "
+            f"Your text has {word_count} words."
+        )
     return True, ""
 
 def sse_error(message: str, **kwargs) -> StreamingResponse:
@@ -90,20 +124,46 @@ async def generate(
 ):
     word_count = count_words(source_material)
 
-    # 1. Hämta användarens plan för inputvalidering
+    # 1. Hämta användarens plan + pooler för inputvalidering
     try:
         quota_response = supabase.rpc(
             'get_quota_status',
             {'p_user_id': x_user_id, 'p_timezone': timezone}
         ).execute()
         plan = quota_response.data.get('plan', 'free')
+        # ── ÄNDRING 2: extrahera quick_refill_remaining explicit ─────────────
+        qr_remaining = quota_response.data.get('quick_refill_remaining', 0)
+        monthly_remaining = quota_response.data.get('monthly_remaining', 0)
     except Exception as e:
         return sse_error(f"Quota check failed: {str(e)}")
 
-    # 2. Validera inputlängd mot plan
-    valid, error_msg = validate_input_length(word_count, plan)
+    # 2. Validera inputlängd mot plan + QR-status
+    valid, error_msg = validate_input_length(word_count, plan, qr_remaining)
     if not valid:
         return sse_error(error_msg)
+
+    # ── ÄNDRING 3: pool-tvång + blockering av ogiltigt Pro-fall ──────────────
+    # Free med >2 000 ord och QR-krediter → tvinga QR-poolen (auto-select 2).
+    force_quick_refill = (
+        plan == 'free' and
+        word_count > 2000 and
+        qr_remaining > 0
+    )
+
+    # Pro med tom månadspool + QR-krediter men text > 3 000 ord → blockera.
+    # QR-poolen tillåter aldrig mer än 3 000 ord (oavsett plan).
+    if plan == 'pro' and monthly_remaining == 0 and qr_remaining > 0 and word_count > 3000:
+        # Sidoeffekt 6 åtgärdad: formatera datumet i Python — råa ISO-strängen
+        # (2026-07-27T00:00:00+00:00) får aldrig nå användaren.
+        next_reset_raw = quota_response.data.get('monthly_reset_at')
+        try:
+            reset_date = datetime.fromisoformat(next_reset_raw).strftime("%B %d")
+        except (TypeError, ValueError):
+            reset_date = "your next billing date"
+        return sse_error(
+            f"Your monthly generation pool is empty. Quick Refill supports texts up to 3,000 words. "
+            f"Shorten your text or wait for your pool to reset on {reset_date}."
+        )
 
     # 3. Förbruka kvot via atomisk RPC (INNAN generering startar)
     #    OBS: Om Claude-anropet senare misslyckas förlorar användaren
@@ -112,20 +172,39 @@ async def generate(
         consume_response = supabase.rpc(
             'consume_generation',
             {
-                'p_user_id':   x_user_id,
-                'p_word_count': word_count,
-                'p_timezone':  timezone
+                'p_user_id':            x_user_id,
+                'p_word_count':         word_count,
+                'p_timezone':           timezone,
+                # ── ÄNDRING 4: skicka force_quick_refill till RPC ────────────
+                'p_force_quick_refill': force_quick_refill
             }
         ).execute()
     except Exception as e:
         return sse_error(f"Quota consumption failed: {str(e)}")
 
-    # ── ÄNDRING 1: Uppdaterad felhantering efter consume_generation ──────────
+    # ── Felhantering efter consume_generation ────────────────────────────────
     if not consume_response.data.get('success'):
         data = consume_response.data
+        reason = data.get('reason', 'quota_exceeded')
+
+        # QR-poolens 3 000-ordstak nått via Pro med DELVIS tömd månadspool
+        # (det fall main.py-blocket ovan inte ser, eftersom monthly_remaining > 0).
+        # Eget läsbart meddelande som degraderar snyggt även innan frontend
+        # fått en handler för reason. Frontend bör dispatcha på `reason`,
+        # inte på `message`.
+        if reason == 'qr_word_limit_exceeded':
+            return sse_error(
+                "Quick Refill supports texts up to 3,000 words. "
+                "Shorten your text to use a Quick Refill credit, "
+                "or wait for your monthly pool to reset.",
+                reason=reason,
+                monthly_remaining=data.get('monthly_remaining', 0),
+                quick_refill_remaining=data.get('quick_refill_remaining', 0)
+            )
+
         return sse_error(
             'quota_exceeded',
-            reason=data.get('reason', 'quota_exceeded'),
+            reason=reason,
             lifetime_remaining=data.get('lifetime_remaining', 0),
             monthly_remaining=data.get('monthly_remaining', 0),
             quick_refill_remaining=data.get('quick_refill_remaining', 0)
@@ -334,7 +413,7 @@ async def stripe_webhook(request: Request):
         if product_type == 'quick_refill':
             supabase.rpc('add_quick_refill', {'p_user_id': user_id}).execute()
 
-        # ── ÄNDRING 2: Pro-aktivering med billing anniversary ────────────────
+        # ── Pro-aktivering med billing anniversary ───────────────────────────
         elif product_type == 'pro':
             from datetime import datetime, timezone
             subscription_id = session.subscription
@@ -350,7 +429,7 @@ async def stripe_webhook(request: Request):
                 'monthly_reset_at':           period_end,
             }).execute()
 
-    # ── ÄNDRING 3: Nedgradering till free ────────────────────────────────────
+    # ── Nedgradering till free ───────────────────────────────────────────────
     elif event.type == 'customer.subscription.deleted':
         metadata = safe_metadata(event.data.object)
         user_id = metadata.get('user_id')
@@ -381,17 +460,18 @@ async def create_checkout(
     if product_type not in ('pro', 'quick_refill'):
         raise HTTPException(status_code=400, detail="Invalid product type")
 
+    # ── ÄNDRING 5: valuta SEK → USD ──────────────────────────────────────────
     if product_type == 'quick_refill':
         price_data = {
-            "currency": "sek",
-            "unit_amount": 2900,  # 29 kr i ören
+            "currency": "usd",
+            "unit_amount": 299,  # $2.99 (cent)
             "product_data": {"name": "Dimindo Quick Refill — 5 generations"},
         }
         mode = "payment"
     else:
         price_data = {
-            "currency": "sek",
-            "unit_amount": 9900,  # 99 kr i ören
+            "currency": "usd",
+            "unit_amount": 999,  # $9.99 (cent)
             "recurring": {"interval": "month"},
             "product_data": {"name": "Dimindo Pro"},
         }

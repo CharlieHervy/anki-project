@@ -133,14 +133,49 @@
 .textarea::placeholder { color: var(--muted); }
 .textarea:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Word counter — below textarea */
+/* ─────────────────────────────────────────────
+   Counter stack (below textarea)
+   Right-aligned column: generation cost (Pro, top) → count/limit →
+   Quick Refill suffix (bottom). The stack owns the top gap so its lines
+   sit flush together.
+───────────────────────────────────────────── */
+.counterStack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  margin-top: 6px;
+}
+
+/* Word counter — primary count/limit metric. */
 .wordCounter {
   font-family: 'DM Mono', monospace;
   font-size: 0.65rem;
   letter-spacing: 0.04em;
-  margin-top: 6px;
   text-align: right;
   transition: color 0.15s;
+}
+
+/* Secondary metadata lines: generation cost (feature 2) and the Quick Refill
+   suffix (feature 1). A notch smaller than the counter, muted, same DM Mono
+   voice — so both read as quiet annotations on the count, not metrics. */
+.counterMeta {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.04em;
+  line-height: 1.5;
+  color: var(--muted);
+  text-align: right;
+}
+
+/* Neutral placeholder shown until /api/quota resolves (or if it fails), so a
+   wrong limit never flashes in and the layout doesn't jump. */
+.counterPlaceholder {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  text-align: right;
 }
 
 /* P2 — word-limit microcopy, anchored under the (disabled) Generate button.
@@ -1323,3 +1358,94 @@
   transition: opacity 0.15s;
 }
 .sidebarToggle:hover::after { opacity: 1; }
+
+/* ─────────────────────────────────────────────
+   Multi-generation education modal
+   (Pro · upload > 3,000 words · shown once, then localStorage-suppressed)
+   Warm dark scrim over the beige page + white card. Buttons mirror the brand
+   ghost (.btnSecondary) and solid (.btnPrimary) styles, minus the latter's
+   margin-left:auto so the .modalActions gap holds.
+───────────────────────────────────────────── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--ink) 38%, transparent);
+  animation: overlayFade 0.2s ease both;
+}
+
+@keyframes overlayFade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.modal {
+  width: 100%;
+  max-width: 440px;
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 32px;
+  box-shadow: 0 8px 40px rgba(13, 13, 13, 0.18);
+  animation: modalEnter 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes modalEnter {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.modalTitle {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.4rem;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-bottom: 12px;
+}
+
+.modalBody {
+  font-size: 0.875rem;
+  font-weight: 300;
+  line-height: 1.65;
+  color: var(--ink);
+  margin-bottom: 24px;
+}
+
+.modalActions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+/* Ghost — mirrors .btnSecondary */
+.modalBtnGhost {
+  padding: 8px 16px;
+  font-size: 0.875rem;
+  font-family: 'DM Sans', sans-serif;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+.modalBtnGhost:hover { border-color: var(--ink); color: var(--ink); }
+
+/* Solid — mirrors .btnPrimary (without margin-left:auto) */
+.modalBtnSolid {
+  padding: 10px 24px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  font-family: 'DM Sans', sans-serif;
+  background: var(--ink);
+  color: white;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.modalBtnSolid:hover { background: #333; transform: translateY(-1px); }
