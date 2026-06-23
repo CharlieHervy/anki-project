@@ -1,0 +1,349 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+/* Design tokens (--paper, --ink, --rule, --muted, --gold, --cream) live in
+   globals.css. No new colour values are introduced here. */
+
+.root {
+  min-height: 100vh;
+  background: var(--paper);
+  font-family: 'DM Sans', sans-serif;
+  color: var(--ink);
+}
+
+/* Wider than the tool page's 680px — two cards need the room. */
+.container {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 80px 24px 96px;
+}
+
+/* ─────────────────────────────────────────────
+   Part 1 — header
+───────────────────────────────────────────── */
+.pageHeader {
+  text-align: center;
+  margin-bottom: 56px;
+}
+
+.eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+
+.title {
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(2.6rem, 6vw, 4rem);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+
+.subtitle {
+  font-size: 1.05rem;
+  font-weight: 300;
+  color: var(--muted);
+}
+
+/* ─────────────────────────────────────────────
+   Part 2 — plan cards
+───────────────────────────────────────────── */
+.plans {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  align-items: stretch;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 32px;
+}
+
+/* Pro — marginally heavier border: ink (vs Free's rule) and +0.5px. */
+.cardPro {
+  border: 1.5px solid var(--ink);
+}
+
+.planLabel {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 20px;
+}
+
+.priceRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.price {
+  font-family: 'DM Serif Display', serif;
+  font-size: 3.2rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+/* Slightly smaller, raised dollar sign. */
+.currency {
+  font-size: 0.55em;
+  vertical-align: 0.18em;
+  margin-right: 0.04em;
+}
+
+.priceUnit {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 300;
+  color: var(--muted);
+}
+
+.planDesc {
+  font-size: 0.92rem;
+  font-weight: 300;
+  color: var(--muted);
+  margin-bottom: 28px;
+}
+
+/* flex:1 makes the list absorb the height difference so both cards' CTAs sit
+   at the same baseline (grid align-items: stretch equalises card heights). */
+.features {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+}
+
+.feature {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 0;
+}
+/* Hairline divider only between consecutive features. */
+.feature + .feature {
+  border-top: 1px solid var(--rule);
+}
+
+.check {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--gold);
+  margin-top: 1px;
+}
+
+.featureText {
+  font-size: 0.95rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+/* Key figures: ink + bold (per the screenshot — gold is reserved for checks). */
+.featureText strong {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Column wrapper so the capacity table nests under its feature, indented past
+   the check icon. */
+.featureBody {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Capacity table — never uses --muted (it fails AA on white). Both columns are
+   ink; hierarchy comes from weight: range light, generation bold. */
+.capacityTable {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.capacityRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 0.82rem;
+}
+
+.capacityRange {
+  color: var(--ink);
+  font-weight: 400;
+}
+
+.capacityGen {
+  color: var(--ink);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* min-height reserves the CTA slot so async auth/plan resolution doesn't shift
+   the card layout when the button or badge fills in. */
+.cta {
+  margin-top: 28px;
+  min-height: 47px;
+}
+
+/* Filled dark CTA — identical to the tool's primary buttons (ink, #333 hover —
+   the established in-app hover value, not a new colour). */
+.ctaBtn {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 14px 24px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: white;
+  background: var(--ink);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.ctaBtn:hover {
+  background: #333;
+  transform: translateY(-1px);
+}
+
+/* Passive "Current plan" — non-interactive status pill on cream. */
+.currentPlan {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 13px 24px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9rem;
+  color: var(--muted);
+  background: var(--cream);
+  border-radius: 4px;
+}
+
+/* Neutralised Free CTA for Pro users — passive label, no action, no downgrade. */
+.passivePlan {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 13px 24px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9rem;
+  color: var(--muted);
+  background: var(--cream);
+  border-radius: 4px;
+}
+
+/* ─────────────────────────────────────────────
+   Part 3 — add-on
+───────────────────────────────────────────── */
+.divider {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 48px 0 0;
+}
+
+.addonLabel {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 28px 0 16px;
+}
+
+.addonCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  padding: 24px 32px;
+}
+
+.addonInfo {
+  min-width: 0;
+}
+
+.addonName {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.2rem;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+.addonDesc {
+  font-size: 0.85rem;
+  font-weight: 300;
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 460px;
+}
+
+.addonRight {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-shrink: 0;
+}
+
+.addonPrice {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.7rem;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+/* Ghost CTA — clear ink border per spec, inverts on hover. */
+.ghostBtn {
+  padding: 12px 22px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--ink);
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.ghostBtn:hover {
+  background: var(--ink);
+  color: white;
+}
+
+/* ─────────────────────────────────────────────
+   Mobile — stack cards and the add-on row
+───────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .container { padding: 56px 20px 72px; }
+  .plans { grid-template-columns: 1fr; }
+  .addonCard {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 18px;
+  }
+  .addonRight {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

@@ -1,0 +1,81 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+/* Design tokens (--paper, --ink, --rule, --muted) are defined in globals.css.
+   These classes were moved here verbatim from page.module.css when the topbar
+   became the shared <Navbar /> component, so it stays a single source of truth. */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 32px;
+  min-height: 68px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--paper);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+/* Now an <a> (links home) — text-decoration reset keeps the original look. */
+.wordmark {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.25rem;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-decoration: none;
+}
+
+/* Right-side topbar group */
+.topbarRight {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+/* Pricing link — the class was already present (and unused) in the original
+   stylesheet; reused here exactly as the original author anticipated. */
+.topbarLink {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.topbarLink:hover { color: var(--ink); }
+
+/* Custom account trigger — replaces Clerk's UserButton avatar so the
+   silhouette colour can be driven by our own tokens (--muted / --ink).
+   Clicking still opens the Clerk profile via openUserProfile(). */
+.accountBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  background: white;
+  border: 1px solid var(--rule);
+  color: var(--muted);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.accountBtn:hover { border-color: var(--ink); }
+
+/* Sign in — shown to logged-out users in the same slot as the account icon.
+   Compact so it stays within the navbar's 32px content band (matching the
+   icon's height), keeping the bar locked at 68px in both states. */
+.signInBtn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.875rem;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 6px 16px;
+  line-height: 1.2;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.signInBtn:hover { border-color: var(--ink); }

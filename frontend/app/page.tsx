@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useUser, useClerk } from '@clerk/nextjs'
 import ReactMarkdown from 'react-markdown'
+import Navbar from './components/Navbar'
 import styles from './page.module.css'
 
 const API = 'https://anki-project-production.up.railway.app'
@@ -96,7 +97,7 @@ function loggDisplay(logg?: string): string | null {
 
 export default function Home() {
   const { user, isLoaded } = useUser()
-  const { openSignIn, openUserProfile } = useClerk()
+  const { openSignIn } = useClerk()
 
   const authHeaders = {
     'x-user-id': user?.id || 'anonymous_user',
@@ -573,45 +574,8 @@ export default function Home() {
       sidebarOpen ? styles.rootSidebarOpen : '',
     ].filter(Boolean).join(' ')}>
 
-      {/* ── Topbar ── */}
-      <header className={styles.topbar}>
-        <span className={styles.wordmark}>Dimindo</span>
-        <div className={styles.topbarRight}>
-          {/* Sign in — shown only once Clerk has loaded and there is no user,
-              so it never flickers in during the initial session resolution.
-              Mutually exclusive with the account icon below (user is null here). */}
-          {isLoaded && !user && (
-            <button
-              className={styles.signInBtn}
-              onClick={() => openSignIn()}
-            >
-              Sign in
-            </button>
-          )}
-          {user && (
-            <button
-              className={styles.accountBtn}
-              onClick={() => openUserProfile()}
-              aria-label="Account"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                width="16"
-                height="16"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <circle cx="12" cy="8" r="3.75" />
-                <path d="M5.5 19.5a6.5 6.5 0 0 1 13 0" />
-              </svg>
-            </button>
-          )}
-        </div>
-      </header>
+      {/* ── Topbar (shared) ── */}
+      <Navbar />
 
       <div className={styles.content}>
 
