@@ -101,6 +101,20 @@
   margin-bottom: 16px;
 }
 
+/* Proactive upgrade link appended to the quota indicator when a free user is
+   genuinely near the wall (0-1 lifetime generations left, no Quick Refill).
+   Inherits the indicator's DM Mono micro-type; gold marks it as the single
+   actionable accent on an otherwise muted line. Not a button. */
+.quotaIndicatorLink {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  color: var(--gold);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.quotaIndicatorLink:hover { color: var(--ink); }
+
 /* B1 — clamp matches demo heading scale */
 .heading {
   font-family: 'DM Serif Display', serif;
@@ -309,8 +323,12 @@
 .btnSecondary:hover { border-color: var(--ink); color: var(--ink); }
 .btnSecondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* Primary (dark) */
+/* Primary (dark) — also used on <Link> (renders an <a>), so it carries
+   display: inline-block + text-decoration: none. Both are inert on the
+   existing <button> usages (a button is already inline-block by default
+   and has no underline). */
 .btnPrimary {
+  display: inline-block;
   margin-left: auto;
   padding: 10px 24px;
   font-size: 0.875rem;
@@ -321,6 +339,7 @@
   border: none;
   border-radius: 3px;
   cursor: pointer;
+  text-decoration: none;
   transition: background 0.15s, transform 0.1s;
 }
 .btnPrimary:hover { background: #333; transform: translateY(-1px); }

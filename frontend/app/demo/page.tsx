@@ -809,7 +809,7 @@ export default function DemoPage() {
                       Upload your own material →
                     </a>
                     <span className="demo-cta-note">
-                      Sign in only required when you export your deck.
+                      Sign in only required when you generate your deck.
                     </span>
                   </div>
                 </>

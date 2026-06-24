@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import Link from 'next/link'
 import { useUser, useClerk } from '@clerk/nextjs'
 import ReactMarkdown from 'react-markdown'
 import Navbar from './components/Navbar'
@@ -663,6 +664,17 @@ export default function Home() {
 
   const approvedCount = cards.filter(c => c.approved).length
 
+  // Free plan genuinely near the wall: 0-1 lifetime generations left AND no
+  // Quick Refill credits to fall back on. Only then do we surface the proactive
+  // upgrade link in the quota indicator. Never on Pro, never while QR credits
+  // remain (the user still has generations via the QR pool), never at >= 2
+  // lifetime generations left.
+  const showPlansLink =
+    !!quota &&
+    quota.plan === 'free' &&
+    quota.lifetime_remaining <= 1 &&
+    quota.quick_refill_remaining === 0
+
   function formatDate(iso: string): string {
     const d = new Date(iso)
     const date = d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -720,24 +732,13 @@ export default function Home() {
                       You&apos;ve used all 3 lifetime generations.
                     </p>
                     <p className={styles.quotaErrorSub}>
-                      Upgrade to Pro or buy a Quick Refill.
+                      See your options on the pricing page.
                     </p>
                     <div className={styles.quotaErrorActions}>
                       <div className={styles.quotaOption}>
-                        <button onClick={() => handleCheckout('pro')} className={styles.btnPrimary}>
-                          Upgrade to Pro →
-                        </button>
-                        <p className={styles.quotaOptionDesc}>
-                          Subscription · 30 generations per month
-                        </p>
-                      </div>
-                      <div className={styles.quotaOption}>
-                        <button onClick={() => handleCheckout('quick_refill')} className={styles.btnSecondary}>
-                          Buy a Quick Refill →
-                        </button>
-                        <p className={styles.quotaOptionDesc}>
-                          One-time purchase · 5 generations · never expires
-                        </p>
+                        <Link href="/pricing" className={styles.btnPrimary}>
+                          View plans →
+                        </Link>
                       </div>
                     </div>
                   </>
@@ -750,6 +751,14 @@ export default function Home() {
             {user && quota && state === 'upload' && quotaIndicatorText() && (
               <p className={styles.quotaIndicator}>
                 {quotaIndicatorText()}
+                {showPlansLink && (
+                  <>
+                    {' · '}
+                    <Link href="/pricing" className={styles.quotaIndicatorLink}>
+                      View plans →
+                    </Link>
+                  </>
+                )}
               </p>
             )}
 
