@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+*.apkg
+/tmp
+.DS_Store
+.vscode/
+*.log
