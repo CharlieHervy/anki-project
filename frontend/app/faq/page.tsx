@@ -39,7 +39,7 @@ const clusters: Cluster[] = [
         a: (
           <>
             Not to generate cards. The upload, generation, and review flow works
-            entirely inside Dimindo. You only need Anki when you want to study:
+            entirely inside Dimindo. You only need Anki when you want to review your cards:
             Dimindo exports a ready-to-import .apkg file. Anki is free and
             available at {ankiweb}.
           </>
