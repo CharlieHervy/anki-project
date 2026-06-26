@@ -1,0 +1,350 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+/* Design tokens (--ink, --paper, --cream, --rule, --muted, --gold) live in
+   globals.css. This module introduces no new colour values and does not
+   redeclare :root — it inherits the system, exactly like page.module.css and
+   pricing/page.module.css do. */
+
+/* ─────────────────────────────────────────────
+   Root + reading column
+   /why is an argument, not a feature grid — so it anchors to the 680px reading
+   measure (same as the tool page), not pricing's 880px two-column width.
+───────────────────────────────────────────── */
+.root {
+  min-height: 100vh;
+  background: var(--paper);
+  font-family: 'DM Sans', sans-serif;
+  color: var(--ink);
+}
+
+.container {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 80px 24px 96px;
+}
+
+/* ─────────────────────────────────────────────
+   Movement rhythm
+   Vertical spacing between movements is owned solely by this adjacent-sibling
+   rule — never by the elements inside them. That keeps section spacing out of
+   any specificity contest with element margins. The first movement (hero) gets
+   no top margin; the container's padding-top handles its space.
+───────────────────────────────────────────── */
+.movement + .movement {
+  margin-top: 72px;
+}
+
+/* ─────────────────────────────────────────────
+   Hero — the thesis is the heading (1A)
+   One restrained fade-up on load, disabled under reduced-motion. No scroll
+   choreography: a reading page earns its motion budget once, at the top.
+───────────────────────────────────────────── */
+.hero {
+  animation: heroIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes heroIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 18px;
+}
+
+/* H1 — clamp matches the demo/tool heading scale. The italic-muted DM Serif
+   Display contrast on "isn't." is the first of exactly two uses on the page
+   (the second is "know" in the closing line) — used as bookends, not decor. */
+.heading {
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.heading em {
+  font-style: italic;
+  color: var(--muted);
+}
+
+/* ─────────────────────────────────────────────
+   Body + section headings
+   Body holds the brief's brödtext ceiling (0.95rem) — no quiet overshoot. The
+   reading column's measure plus 1.75 line-height carries the long-form comfort.
+───────────────────────────────────────────── */
+.body {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 300;
+  font-size: 0.95rem;
+  line-height: 1.75;
+  color: var(--ink);
+}
+.body + .body {
+  margin-top: 20px;
+}
+
+.h2 {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.6rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+
+.h3 {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.3rem;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+
+/* ─────────────────────────────────────────────
+   Pull-quote — the problem's gut-punch
+   Restrained editorial device (a conventional quote), not the signature.
+   Carries the one gold accent of the problem half: a 2px gold left rule.
+───────────────────────────────────────────── */
+.pullQuote {
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(1.35rem, 3vw, 1.7rem);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  border-left: 2px solid var(--gold);
+  padding-left: 24px;
+  margin: 36px 0;
+}
+
+/* Bridge — quiet pivot from problem to solution. Emphasis through isolation +
+   weight, not a font change (serif is reserved for the real moments). */
+.bridge {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: 1rem;
+  color: var(--ink);
+  margin-top: 28px;
+}
+
+/* ─────────────────────────────────────────────
+   The principle — the signature moment
+   A monument: centered serif flanked by full-column hairlines, with generous
+   breathing room. The operative term carries the product's own cloze answer-slot
+   highlight (--cream) — a typographic echo of the card grammar, meaningful even
+   to a first-time reader as plain emphasis. This is where the boldness is spent;
+   everything else stays disciplined.
+───────────────────────────────────────────── */
+.principle {
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  padding: 56px 0;
+}
+
+.principleText {
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(1.5rem, 3.5vw, 2.1rem);
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-align: center;
+  max-width: 540px;
+  margin: 0 auto;
+}
+
+.principleKey {
+  background: var(--cream);
+  padding: 1px 6px;
+  border-radius: 2px;
+}
+
+/* ─────────────────────────────────────────────
+   Three capabilities — enumerated closed set
+   The copy announces "three capabilities", so 01/02/03 track a declared count
+   (not a fabricated sequence). Number in a fixed left gutter, content beside it,
+   hairline only between consecutive items — the pricing list's rhythm.
+───────────────────────────────────────────── */
+.capabilities {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.capability {
+  display: flex;
+  gap: 20px;
+  padding: 28px 0;
+}
+.capability:first-child {
+  padding-top: 0;
+}
+.capability + .capability {
+  border-top: 1px solid var(--rule);
+}
+
+.capabilityIndex {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  flex-shrink: 0;
+  width: 28px;
+  padding-top: 5px;
+}
+
+.capabilityContent {
+  flex: 1;
+  min-width: 0;
+}
+
+.capabilityBody {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 300;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--ink);
+}
+
+/* Transition paragraph after the trio gets its own breathing room. */
+.capabilities + .body {
+  margin-top: 36px;
+}
+
+/* ─────────────────────────────────────────────
+   Understand before you memorize — the honest turn
+   Cream band marks the tonal shift from "what Dimindo does" to "what it
+   deliberately doesn't". No border (cards carry the border; the band is a
+   section, not a card) and generous padding keep the two visually distinct.
+───────────────────────────────────────────── */
+.band {
+  background: var(--cream);
+  border-radius: 4px;
+  padding: 48px 44px;
+}
+
+.bandHeading {
+  font-family: 'DM Serif Display', serif;
+  font-size: 1.6rem;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin-bottom: 16px;
+}
+
+.bandBody {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 300;
+  font-size: 0.95rem;
+  line-height: 1.75;
+  color: var(--ink);
+}
+
+/* ─────────────────────────────────────────────
+   Closing — the payoff
+   Quiet serif statement; the page's second and final italic-muted contrast,
+   on "know". Sits below the principle in scale — the monument stays tallest.
+───────────────────────────────────────────── */
+.closing {
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(1.4rem, 2.8vw, 1.7rem);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-top: 28px;
+}
+.closing em {
+  font-style: italic;
+  color: var(--muted);
+}
+
+/* ─────────────────────────────────────────────
+   Exit to /demo — subtle, narratively motivated, not a button
+   Owns its own top spacing (it is not a .movement), so the finale gets a clean
+   hairline + generous lead without stacking the sibling margin. Skip-link
+   styling per the brief; the single gold arrow is the one actionable accent,
+   nudging on hover (disabled under reduced-motion).
+───────────────────────────────────────────── */
+.exit {
+  margin-top: 80px;
+  border-top: 1px solid var(--rule);
+  padding-top: 48px;
+}
+
+.exitLink {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.exitText {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 2px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.exitLink:hover .exitText {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.exitArrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 1rem;
+  color: var(--gold);
+  transition: transform 0.15s;
+}
+.exitLink:hover .exitArrow {
+  transform: translateX(3px);
+}
+
+.exitLink:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+/* ─────────────────────────────────────────────
+   Mobile
+───────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .container {
+    padding: 56px 20px 72px;
+  }
+  .movement + .movement {
+    margin-top: 56px;
+  }
+  .principle {
+    padding: 44px 0;
+  }
+  .band {
+    padding: 36px 24px;
+  }
+  .exit {
+    margin-top: 64px;
+    padding-top: 40px;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   Reduced motion — honour the preference everywhere
+───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .hero {
+    animation: none;
+  }
+  .exitArrow,
+  .exitText {
+    transition: none;
+  }
+  .exitLink:hover .exitArrow {
+    transform: none;
+  }
+}
