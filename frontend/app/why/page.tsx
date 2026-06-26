@@ -85,7 +85,7 @@ export default function Why() {
               <div className={styles.capabilityContent}>
                 <h3 className={styles.h3}>Context</h3>
                 <p className={styles.capabilityBody}>
-                  Every card includes an explanation note — one sentence on why
+                  Every card includes an explanation note on the back — one sentence on why
                   the fact matters, not just what it is. Facts stick when they
                   connect to something. Context gives them something to connect
                   to.
@@ -133,7 +133,7 @@ export default function Why() {
           <h2 className={styles.bandHeading}>Understand before you memorize</h2>
           <p className={styles.bandBody}>
             Anki is a tool for long-term retention, not initial comprehension.
-            Before you export, Dimindo is available to answer questions, explain
+            Before you export, Dimindo&apos;s chatbot is available to answer questions, explain
             mechanisms, and help you build the mental model that makes the cards
             meaningful.
           </p>
