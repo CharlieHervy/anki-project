@@ -19,7 +19,7 @@ export default function Why() {
 
         {/* ── Hero — the thesis is the heading (1A) ── */}
         <header className={styles.hero}>
-          <p className={styles.eyebrow}>Why Dimindo</p>
+          <p className={styles.eyebrow}>Why Dimindo?</p>
           <h1 className={styles.heading}>
             Making Anki cards is easy. Making Anki cards worth reviewing for the
             next two years <em>isn&apos;t.</em>
@@ -28,6 +28,7 @@ export default function Why() {
 
         {/* ── The problem ── */}
         <section className={styles.movement}>
+          <br></br>
           <p className={styles.body}>
             The problem isn&apos;t the few minutes you spend creating a bad card.
             It&apos;s that you&apos;ll review it hundreds of times. A card that
