@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import Link from 'next/link'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -218,11 +219,16 @@ export default function DemoPage() {
           color: var(--ink);
         }
 
-        /* ---- Top bar ---- */
+        /* ---- Top bar ----
+           The skip link has been removed (this is now a standalone marketing
+           page in the circular chain, not an onboarding step), so the wordmark
+           and the "Live demo" badge group together on the left rather than
+           sitting at opposite edges. */
         .demo-topbar {
           display: flex;
           align-items: center;
-          justify-content: space-between;
+          justify-content: flex-start;
+          gap: 14px;
           padding: 18px 32px;
           border-bottom: 1px solid var(--rule);
           background: var(--paper);
@@ -247,15 +253,6 @@ export default function DemoPage() {
           padding: 3px 8px;
           border-radius: 2px;
         }
-        .demo-skip-top {
-          font-size: 0.8rem;
-          color: var(--muted);
-          text-decoration: none;
-          border-bottom: 1px solid var(--rule);
-          padding-bottom: 1px;
-          transition: color 0.15s, border-color 0.15s;
-        }
-        .demo-skip-top:hover { color: var(--ink); border-color: var(--ink); }
 
         /* ---- Pick screen ---- */
         .demo-pick {
@@ -292,7 +289,7 @@ export default function DemoPage() {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 12px;
-          margin-bottom: 32px;
+          margin-bottom: 0;
         }
         @media (max-width: 520px) { .demo-grid { grid-template-columns: 1fr; } }
 
@@ -337,30 +334,6 @@ export default function DemoPage() {
           color: var(--muted);
           font-family: 'DM Mono', monospace;
         }
-        .demo-or-divider {
-          text-align: center;
-          font-size: 0.75rem;
-          color: var(--rule);
-          letter-spacing: 0.1em;
-          font-family: 'DM Mono', monospace;
-          margin: 8px 0;
-        }
-        .demo-skip-full {
-          display: block;
-          width: 100%;
-          padding: 14px;
-          background: transparent;
-          border: 1px dashed var(--rule);
-          border-radius: 4px;
-          font-size: 0.85rem;
-          color: var(--muted);
-          cursor: pointer;
-          text-align: center;
-          transition: border-color 0.15s, color 0.15s;
-          font-family: 'DM Sans', sans-serif;
-          text-decoration: none;
-        }
-        .demo-skip-full:hover { border-color: var(--ink); color: var(--ink); }
 
         /* Fetch error in pick screen */
         .demo-fetch-error {
@@ -590,56 +563,54 @@ export default function DemoPage() {
         }
         .demo-back-btn:hover { color: var(--ink); }
 
-        /* CTA */
-        .demo-cta {
+        /* ---- Exit to /faq ----
+           Replaces the old product CTA. Subtle, narratively motivated text link
+           — identical in style and behaviour to the exits on /why and /faq, so
+           the hand-off between the three marketing pages reads as one system.
+           The visitor has just watched the cards being built; /faq answers the
+           practical questions that raises. */
+        .demo-exit {
           margin-top: 48px;
           border-top: 1px solid var(--rule);
-          padding-top: 36px;
+          padding-top: 48px;
         }
-        .demo-cta-eyebrow {
-          font-family: 'DM Mono', monospace;
-          font-size: 0.65rem;
-          letter-spacing: 0.14em;
-          text-transform: uppercase;
-          color: var(--muted);
-          margin-bottom: 12px;
-        }
-        .demo-cta-heading {
-          font-family: 'DM Serif Display', serif;
-          font-size: 1.4rem;
-          line-height: 1.25;
-          letter-spacing: -0.01em;
-          margin-bottom: 8px;
-        }
-        .demo-cta-body {
-          font-size: 0.875rem;
-          font-weight: 300;
-          color: var(--muted);
-          line-height: 1.65;
-          margin-bottom: 24px;
-        }
-        .demo-cta-btn {
+        .demo-exit-link {
           display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 13px 28px;
-          background: var(--ink);
-          color: white;
-          font-size: 0.875rem;
-          font-family: 'DM Sans', sans-serif;
-          font-weight: 500;
-          border-radius: 3px;
+          align-items: baseline;
+          gap: 10px;
           text-decoration: none;
-          cursor: pointer;
-          transition: background 0.15s, transform 0.1s;
-          border: none;
         }
-        .demo-cta-btn:hover { background: #333; transform: translateY(-1px); }
-        .demo-cta-note {
-          display: block;
-          margin-top: 12px;
-          font-size: 0.75rem;
+        .demo-exit-text {
+          font-family: 'DM Sans', sans-serif;
+          font-size: 1rem;
           color: var(--muted);
+          border-bottom: 1px solid var(--rule);
+          padding-bottom: 2px;
+          transition: color 0.15s, border-color 0.15s;
+        }
+        .demo-exit-link:hover .demo-exit-text {
+          color: var(--ink);
+          border-color: var(--ink);
+        }
+        .demo-exit-arrow {
+          font-family: 'DM Mono', monospace;
+          font-size: 1rem;
+          color: var(--gold);
+          transition: transform 0.15s;
+        }
+        .demo-exit-link:hover .demo-exit-arrow {
+          transform: translateX(3px);
+        }
+        .demo-exit-link:focus-visible {
+          outline: 2px solid var(--ink);
+          outline-offset: 4px;
+          border-radius: 2px;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .demo-exit-text,
+          .demo-exit-arrow { transition: none; }
+          .demo-exit-link:hover .demo-exit-arrow { transform: none; }
         }
       `}</style>
 
@@ -649,13 +620,6 @@ export default function DemoPage() {
         <header className="demo-topbar">
           <a href="https://dimindo.com" className="demo-wordmark">Dimindo</a>
           <span className="demo-badge">Live demo</span>
-          <a
-            href="https://dimindo.com"
-            className="demo-skip-top"
-            onClick={() => { document.cookie = 'dimindo_demo_seen=1; path=/; max-age=31536000' }}
-          >
-            Skip demo — upload your own material →
-          </a>
         </header>
 
         {/* ══════════════════════════════════════════
@@ -692,16 +656,6 @@ export default function DemoPage() {
                 </button>
               ))}
             </div>
-
-            <div className="demo-or-divider">or</div>
-
-            <a
-              href="https://dimindo.com"
-              className="demo-skip-full"
-              onClick={() => { document.cookie = 'dimindo_demo_seen=1; path=/; max-age=31536000' }}
-            >
-              Skip demo — upload your own material →
-            </a>
           </section>
         )}
 
@@ -794,23 +748,16 @@ export default function DemoPage() {
                     ))}
                   </div>
 
-                  {/* CTA */}
-                  <div className="demo-cta">
-                    <p className="demo-cta-eyebrow">Ready to go further?</p>
-                    <h3 className="demo-cta-heading">
-                      These cards were generated from a sample text.
-                    </h3>
-                    <p className="demo-cta-body">
-                      Upload your own lecture notes, textbook chapters, or research
-                      papers and get a full deck — tailored to exactly what you need
-                      to learn.
-                    </p>
-                    <a href="https://dimindo.com" className="demo-cta-btn">
-                      Upload your own material →
-                    </a>
-                    <span className="demo-cta-note">
-                      Sign in only required when you generate your deck.
-                    </span>
+                  {/* ── Exit to /faq — subtle, narratively motivated, not a button ── */}
+                  <div className="demo-exit">
+                    <Link href="/faq" className="demo-exit-link">
+                      <span className="demo-exit-text">
+                        The practical questions, answered
+                      </span>
+                      <span className="demo-exit-arrow" aria-hidden="true">
+                        →
+                      </span>
+                    </Link>
                   </div>
                 </>
               )}
