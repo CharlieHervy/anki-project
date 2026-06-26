@@ -1,0 +1,286 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
+
+/* Design tokens (--ink, --paper, --cream, --rule, --muted, --gold) live in
+   globals.css. This module introduces no new colour values and does not
+   redeclare :root — same as page.module.css, pricing, and /why. */
+
+/* ─────────────────────────────────────────────
+   Root + reading column
+   Reference, not essay — but the same 680px measure as /why keeps the two new
+   marketing pages visually of a piece.
+───────────────────────────────────────────── */
+.root {
+  min-height: 100vh;
+  background: var(--paper);
+  font-family: 'DM Sans', sans-serif;
+  color: var(--ink);
+}
+
+.container {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 80px 24px 96px;
+}
+
+/* ─────────────────────────────────────────────
+   Hero — eyebrow · serif H1 · muted subtitle (the pricing header pattern,
+   left-aligned for a functional page). One restrained fade-up on load,
+   disabled under reduced-motion — matching /why.
+───────────────────────────────────────────── */
+.hero {
+  animation: heroIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+  margin-bottom: 8px;
+}
+
+@keyframes heroIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.eyebrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  margin-bottom: 18px;
+}
+
+.heading {
+  font-family: 'DM Serif Display', serif;
+  font-size: clamp(2rem, 5vw, 3.2rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.subtitle {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 300;
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: var(--muted);
+  margin-top: 16px;
+}
+
+/* ─────────────────────────────────────────────
+   Cluster — semantic group
+   Mono panel label with the trailing hairline (the demo's "Source text" motif)
+   marks each group. Muted, not gold: the labels are orientation, not accent.
+───────────────────────────────────────────── */
+.cluster:first-of-type {
+  margin-top: 56px;
+}
+.cluster + .cluster {
+  margin-top: 48px;
+}
+
+.clusterLabel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.clusterLabel::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--rule);
+}
+
+/* ─────────────────────────────────────────────
+   Q&A accordion — native <details>/<summary>, no JavaScript
+   Hairline only between consecutive items (the pricing feature-list rhythm):
+   no rule above the first or below the last, so the cluster label's own rule is
+   the group boundary.
+───────────────────────────────────────────── */
+.item + .item {
+  border-top: 1px solid var(--rule);
+}
+
+/* Summary is the clickable question row. The default disclosure triangle is
+   removed; a DM Mono +/− sits at the right (typographic, in the brand's voice,
+   rather than an icon). flex-start keeps the marker aligned to the first line
+   when a question wraps. */
+.question {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 0;
+  cursor: pointer;
+  list-style: none;
+}
+.question::-webkit-details-marker {
+  display: none;
+}
+
+.questionText {
+  flex: 1;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 500;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+/* +/− marker — muted by default, ink on hover and when open (active). The glyph
+   swaps on [open]; an instant swap (no tween) is the honest behaviour for a
+   content change and needs no motion budget. */
+.question::after {
+  content: '+';
+  font-family: 'DM Mono', monospace;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--muted);
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+.question:hover::after {
+  color: var(--ink);
+}
+.item[open] .question::after {
+  content: '−';
+  color: var(--ink);
+}
+
+/* Visible keyboard focus on the summary (native focusable element). */
+.question:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* Answer — revealed on open. A subtle fade settles it in; because a closed
+   <details> keeps its non-summary children out of the render, this animation
+   runs exactly when the panel opens. Reduced-motion removes it. */
+.answer {
+  padding: 0 0 22px;
+}
+.item[open] .answer {
+  animation: answerIn 0.2s ease both;
+}
+
+@keyframes answerIn {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.answerText {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 300;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--ink);
+  /* keep the answer clear of the marker column on the right */
+  padding-right: 28px;
+}
+
+/* Inline links in answers (ankiweb.net, /pricing). Ink text for AA contrast —
+   gold as text on paper fails legibility — with the gold accent carried by the
+   underline, the product's link colour. Underline goes ink on hover. */
+.answerLink {
+  color: var(--ink);
+  text-decoration: none;
+  border-bottom: 1px solid var(--gold);
+  transition: border-color 0.15s;
+}
+.answerLink:hover {
+  border-color: var(--ink);
+}
+.answerLink:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 1px;
+}
+
+/* ─────────────────────────────────────────────
+   Exit to /why — subtle, narratively motivated, not a button
+   Identical treatment to /why's exit, so the contextual hand-off between
+   marketing pages reads as one system. Owns its own top spacing.
+───────────────────────────────────────────── */
+.exit {
+  margin-top: 72px;
+  border-top: 1px solid var(--rule);
+  padding-top: 48px;
+}
+
+.exitLink {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  text-decoration: none;
+}
+
+.exitText {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 1rem;
+  color: var(--muted);
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 2px;
+  transition: color 0.15s, border-color 0.15s;
+}
+.exitLink:hover .exitText {
+  color: var(--ink);
+  border-color: var(--ink);
+}
+
+.exitArrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 1rem;
+  color: var(--gold);
+  transition: transform 0.15s;
+}
+.exitLink:hover .exitArrow {
+  transform: translateX(3px);
+}
+
+.exitLink:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 4px;
+  border-radius: 2px;
+}
+
+/* ─────────────────────────────────────────────
+   Mobile
+───────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .container {
+    padding: 56px 20px 72px;
+  }
+  .cluster:first-of-type {
+    margin-top: 44px;
+  }
+  .cluster + .cluster {
+    margin-top: 40px;
+  }
+  .exit {
+    margin-top: 56px;
+    padding-top: 40px;
+  }
+}
+
+/* ─────────────────────────────────────────────
+   Reduced motion — honour the preference everywhere
+───────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .hero {
+    animation: none;
+  }
+  .item[open] .answer {
+    animation: none;
+  }
+  .question::after,
+  .exitArrow,
+  .exitText {
+    transition: none;
+  }
+  .exitLink:hover .exitArrow {
+    transform: none;
+  }
+}
