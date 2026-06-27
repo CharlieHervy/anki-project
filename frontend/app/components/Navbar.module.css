@@ -17,6 +17,15 @@
   z-index: 100;
 }
 
+/* Left group — wordmark plus an optional context badge (used by /demo's
+   "Live demo"). With no badge the group holds the wordmark alone, so the bar is
+   visually unchanged on every page that passes no badge. */
+.topbarLeft {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
 /* Now an <a> (links home) — text-decoration reset keeps the original look. */
 .wordmark {
   font-family: 'DM Serif Display', serif;
@@ -24,6 +33,19 @@
   letter-spacing: -0.01em;
   color: var(--ink);
   text-decoration: none;
+}
+
+/* Context badge — ported verbatim from /demo's former self-contained topbar so
+   the demo keeps its "Live demo" marker now that it renders the shared navbar. */
+.badge {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--rule);
+  padding: 3px 8px;
+  border-radius: 2px;
 }
 
 /* Right-side topbar group. flex-wrap lets the link row spill onto a second line

@@ -6,9 +6,11 @@ import { useUser, useClerk } from '@clerk/nextjs'
 import styles from './Navbar.module.css'
 
 // Shared topbar. Extracted from app/page.tsx so every page renders the exact
-// same navbar from one source. Clerk auth-state drives the right-hand slot:
-// Sign in (logged out) ⇄ account icon (logged in), mutually exclusive and gated
-// on isLoaded so neither flickers during session resolve.
+// same navbar from one source — including /demo, which now renders this
+// component (with a "Live demo" badge via the optional `badge` prop) instead of
+// its own former self-contained bar. Clerk auth-state drives the right-hand
+// slot: Sign in (logged out) ⇄ account icon (logged in), mutually exclusive and
+// gated on isLoaded so neither flickers during session resolve.
 //
 // Nav links (Demo · Why Dimindo? · FAQ · Pricing) sit in the right-hand group in
 // the decided order. The active page is marked with aria-current="page"; the CSS
@@ -17,10 +19,9 @@ import styles from './Navbar.module.css'
 // not a nav target, so it is deliberately excluded from active-state — on the
 // tool page (/) none of the links match, which is the correct outcome.
 //
-// /demo renders its own self-contained topbar (not this component) and is left
-// untouched. /welcome will get its own onboarding navbar; were it ever to render
-// this one, usePathname would match none of the links and nothing would be
-// marked active — the logic degrades correctly with no special-casing.
+// /welcome will get its own onboarding navbar; were it ever to render this one,
+// usePathname would match none of the links and nothing would be marked active —
+// the logic degrades correctly with no special-casing.
 
 const navLinks = [
   { href: '/demo', label: 'Demo' },
@@ -29,17 +30,23 @@ const navLinks = [
   { href: '/pricing', label: 'Pricing' },
 ]
 
-export default function Navbar() {
+export default function Navbar({ badge }: { badge?: string }) {
   const { user, isLoaded } = useUser()
   const { openSignIn, openUserProfile } = useClerk()
   const pathname = usePathname()
 
   return (
     <header className={styles.topbar}>
-      {/* Logo navigates home — excluded from active-state (it's a logo, not a nav target). */}
-      <Link href="/" className={styles.wordmark}>
-        Dimindo
-      </Link>
+      {/* Left group — wordmark plus an optional context badge (e.g. /demo's
+          "Live demo"). With no badge it holds the wordmark alone, so the bar is
+          visually unchanged on every other page. */}
+      <div className={styles.topbarLeft}>
+        {/* Logo navigates home — excluded from active-state (it's a logo, not a nav target). */}
+        <Link href="/" className={styles.wordmark}>
+          Dimindo
+        </Link>
+        {badge && <span className={styles.badge}>{badge}</span>}
+      </div>
 
       <div className={styles.topbarRight}>
         {navLinks.map(link => (

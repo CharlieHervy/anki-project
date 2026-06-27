@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
+import Navbar from '../components/Navbar'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -219,40 +220,12 @@ export default function DemoPage() {
           color: var(--ink);
         }
 
-        /* ---- Top bar ----
-           The skip link has been removed (this is now a standalone marketing
-           page in the circular chain, not an onboarding step), so the wordmark
-           and the "Live demo" badge group together on the left rather than
-           sitting at opposite edges. */
-        .demo-topbar {
-          display: flex;
-          align-items: center;
-          justify-content: flex-start;
-          gap: 14px;
-          padding: 18px 32px;
-          border-bottom: 1px solid var(--rule);
-          background: var(--paper);
-          position: sticky;
-          top: 0;
-          z-index: 100;
-        }
-        .demo-wordmark {
-          font-family: 'DM Serif Display', serif;
-          font-size: 1.25rem;
-          letter-spacing: -0.01em;
-          color: var(--ink);
-          text-decoration: none;
-        }
-        .demo-badge {
-          font-family: 'DM Mono', monospace;
-          font-size: 0.68rem;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-          color: var(--muted);
-          border: 1px solid var(--rule);
-          padding: 3px 8px;
-          border-radius: 2px;
-        }
+        /* ---- Top bar moved to the shared <Navbar /> component ----
+           /demo now renders the same navbar as every other page (with a
+           "Live demo" badge passed via the badge prop), so the nav links and
+           the account slot live in one source of truth. The styles below that
+           positioned the old self-contained bar are gone with it; only the
+           68px height it occupies survives, in the stage calc() values. */
 
         /* ---- Pick screen ---- */
         .demo-pick {
@@ -354,7 +327,7 @@ export default function DemoPage() {
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 0;
-          height: calc(100vh - 57px);
+          height: calc(100vh - 68px);
           overflow: hidden;
         }
         /* In review: stage expands; source panel sticks; right panel scrolls with page */
@@ -378,8 +351,8 @@ export default function DemoPage() {
         }
         .demo-stage--review .demo-source-panel {
           position: sticky;
-          top: 57px;
-          height: calc(100vh - 57px);
+          top: 68px;
+          height: calc(100vh - 68px);
           overflow-y: auto;
         }
 
@@ -616,11 +589,8 @@ export default function DemoPage() {
 
       <div className="demo-root">
 
-        {/* ── Top bar ── */}
-        <header className="demo-topbar">
-          <a href="https://dimindo.com" className="demo-wordmark">Dimindo</a>
-          <span className="demo-badge">Live demo</span>
-        </header>
+        {/* ── Top bar — shared navbar with the "Live demo" badge ── */}
+        <Navbar badge="Live demo" />
 
         {/* ══════════════════════════════════════════
             STEP 1 — Subject picker
