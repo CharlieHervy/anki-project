@@ -1,29 +1,57 @@
 'use client'
 
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { useUser, useClerk } from '@clerk/nextjs'
 import styles from './Navbar.module.css'
 
-// Shared topbar. Extracted from app/page.tsx so the tool page and /pricing
-// render the exact same navbar from one source. Clerk auth-state drives the
-// right-hand slot: Sign in (logged out) ⇄ account icon (logged in), mutually
-// exclusive and gated on isLoaded so neither flickers during session resolve.
+// Shared topbar. Extracted from app/page.tsx so every page renders the exact
+// same navbar from one source. Clerk auth-state drives the right-hand slot:
+// Sign in (logged out) ⇄ account icon (logged in), mutually exclusive and gated
+// on isLoaded so neither flickers during session resolve.
+//
+// Nav links (Demo · Why Dimindo? · FAQ · Pricing) sit in the right-hand group in
+// the decided order. The active page is marked with aria-current="page"; the CSS
+// derives the visual (a muted→ink shift) straight from that attribute, so the
+// semantic and visual states share one source of truth. The wordmark is a logo,
+// not a nav target, so it is deliberately excluded from active-state — on the
+// tool page (/) none of the links match, which is the correct outcome.
+//
+// /demo renders its own self-contained topbar (not this component) and is left
+// untouched. /welcome will get its own onboarding navbar; were it ever to render
+// this one, usePathname would match none of the links and nothing would be
+// marked active — the logic degrades correctly with no special-casing.
+
+const navLinks = [
+  { href: '/demo', label: 'Demo' },
+  { href: '/why', label: 'Why Dimindo?' },
+  { href: '/faq', label: 'FAQ' },
+  { href: '/pricing', label: 'Pricing' },
+]
+
 export default function Navbar() {
   const { user, isLoaded } = useUser()
   const { openSignIn, openUserProfile } = useClerk()
+  const pathname = usePathname()
 
   return (
     <header className={styles.topbar}>
-      {/* Logo now navigates home — the app has multiple routes as of /pricing. */}
+      {/* Logo navigates home — excluded from active-state (it's a logo, not a nav target). */}
       <Link href="/" className={styles.wordmark}>
         Dimindo
       </Link>
 
       <div className={styles.topbarRight}>
-        {/* Pricing — between the logo and the Sign in / account slot. */}
-        <Link href="/pricing" className={styles.topbarLink}>
-          Pricing
-        </Link>
+        {navLinks.map(link => (
+          <Link
+            key={link.href}
+            href={link.href}
+            className={styles.topbarLink}
+            aria-current={pathname === link.href ? 'page' : undefined}
+          >
+            {link.label}
+          </Link>
+        ))}
 
         {isLoaded && !user && (
           <button className={styles.signInBtn} onClick={() => openSignIn()}>

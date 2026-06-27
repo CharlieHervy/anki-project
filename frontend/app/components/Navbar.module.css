@@ -26,15 +26,21 @@
   text-decoration: none;
 }
 
-/* Right-side topbar group */
+/* Right-side topbar group. flex-wrap lets the link row spill onto a second line
+   on narrow screens rather than overflowing the bar — a lightweight interim
+   until a dedicated mobile menu is built. Only this group wraps; the wordmark
+   stays fixed at the left. */
 .topbarRight {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 16px;
 }
 
-/* Pricing link — the class was already present (and unused) in the original
-   stylesheet; reused here exactly as the original author anticipated. */
+/* Nav links (Demo · Why Dimindo? · FAQ · Pricing) — one class for all four.
+   The class was already present (and originally only used for Pricing); the
+   three new links reuse it exactly as the original author anticipated. */
 .topbarLink {
   font-family: 'DM Sans', sans-serif;
   font-size: 0.78rem;
@@ -43,6 +49,12 @@
   transition: color 0.15s;
 }
 .topbarLink:hover { color: var(--ink); }
+
+/* Active page — the visual is derived straight from the semantic aria-current,
+   so the two can never drift. A permanent muted→ink shift (the same target as
+   hover); no underline, no weight change, no gold — in keeping with the
+   restraint of the bar. Gold stays reserved for eyebrows and exit arrows. */
+.topbarLink[aria-current='page'] { color: var(--ink); }
 
 /* Custom account trigger — replaces Clerk's UserButton avatar so the
    silhouette colour can be driven by our own tokens (--muted / --ink).
@@ -79,3 +91,14 @@
   transition: border-color 0.15s;
 }
 .signInBtn:hover { border-color: var(--ink); }
+
+/* Mobile — tighten horizontal padding and the link gap so the longer row fits
+   on one line as far down as possible before flex-wrap takes over. */
+@media (max-width: 600px) {
+  .topbar {
+    padding: 14px 20px;
+  }
+  .topbarRight {
+    gap: 12px;
+  }
+}
