@@ -25,7 +25,7 @@ import styles from './Navbar.module.css'
 
 const navLinks = [
   { href: '/demo', label: 'Demo' },
-  { href: '/why', label: 'Why Dimindo?' },
+  { href: '/why', label: 'Our Philosophy' },
   { href: '/faq', label: 'FAQ' },
   { href: '/pricing', label: 'Pricing' },
 ]
