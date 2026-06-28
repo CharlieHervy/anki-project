@@ -47,6 +47,46 @@ type Quota =
       quick_refill_remaining: number
     }
 
+// Preset Study-Assistant questions, keyed by the same output-language values the
+// language <select> emits ('English' | 'Swedish' | 'German' | 'French' |
+// 'Spanish'). These are the empty-state entry points into the AI chat; clicking
+// one sends it verbatim as the first message. The backend system prompt mirrors
+// the student's language automatically, so the only requirement here is that the
+// suggestion text itself matches the language the cards were generated in.
+//
+// Lookups fall back to English when the key is missing — which is exactly the
+// desired behaviour for historical sessions loaded via ?session_id= (those load
+// on a fresh page where `language` holds its default 'English'; the output
+// language is not persisted in the DB, and English fallback is the accepted
+// behaviour per spec).
+const AI_SUGGESTIONS: Record<string, [string, string, string]> = {
+  English: [
+    'Explain card 1',
+    'Give me a memory trick for this topic',
+    "What's the broader context here?",
+  ],
+  Swedish: [
+    'Förklara kort 1',
+    'Ge mig ett minnesknep för det här ämnet',
+    'Vad är det större sammanhanget här?',
+  ],
+  German: [
+    'Erkläre Karte 1',
+    'Gib mir einen Merktrick für dieses Thema',
+    'Was ist der größere Kontext hier?',
+  ],
+  French: [
+    'Explique la carte 1',
+    'Donne-moi un moyen mnémotechnique pour ce sujet',
+    'Quel est le contexte plus large ici ?',
+  ],
+  Spanish: [
+    'Explica la tarjeta 1',
+    'Dame un truco mnemónico para este tema',
+    '¿Cuál es el contexto más amplio aquí?',
+  ],
+}
+
 function SidebarIcon() {
   return (
     <svg width="15" height="14" viewBox="0 0 15 14" fill="currentColor" aria-hidden="true">
@@ -1138,11 +1178,12 @@ export default function Home() {
                         Ask about any card or concept in your source material.
                       </p>
                       <div className={styles.aiSuggestions}>
-                        {[
-                          'Explain card 1',
-                          'Give me a memory trick for this topic',
-                          "What's the broader context here?",
-                        ].map(q => (
+                        {/* Preset questions in the output language chosen at
+                            generation time. Falls back to English for historical
+                            sessions (?session_id=), where `language` is its
+                            default 'English' because the output language is not
+                            persisted in the DB. */}
+                        {(AI_SUGGESTIONS[language] ?? AI_SUGGESTIONS.English).map(q => (
                           <button
                             key={q}
                             className={styles.aiSuggestion}
