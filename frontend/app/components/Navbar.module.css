@@ -1,8 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
 
-/* Design tokens (--paper, --ink, --rule, --muted) are defined in globals.css.
-   These classes were moved here verbatim from page.module.css when the topbar
-   became the shared <Navbar /> component, so it stays a single source of truth. */
+/* Design tokens (--paper, --ink, --rule, --muted, --gold) are defined in
+   globals.css. This module introduces no new colour values. */
 
 .topbar {
   display: flex;
@@ -18,8 +17,7 @@
 }
 
 /* Left group — wordmark plus an optional context badge (used by /demo's
-   "Live demo"). With no badge the group holds the wordmark alone, so the bar is
-   visually unchanged on every page that passes no badge. */
+   "Live demo"). With no badge the group holds the wordmark alone. */
 .topbarLeft {
   display: flex;
   align-items: center;
@@ -48,21 +46,15 @@
   border-radius: 2px;
 }
 
-/* Right-side topbar group. flex-wrap lets the link row spill onto a second line
-   on narrow screens rather than overflowing the bar — a lightweight interim
-   until a dedicated mobile menu is built. Only this group wraps; the wordmark
-   stays fixed at the left. */
+/* Right-side group — nav links + auth. Shown on desktop; hidden ≤768px, where
+   the hamburger menu takes over. */
 .topbarRight {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  justify-content: flex-end;
   gap: 16px;
 }
 
-/* Nav links (Demo · Why Dimindo? · FAQ · Pricing) — one class for all four.
-   The class was already present (and originally only used for Pricing); the
-   three new links reuse it exactly as the original author anticipated. */
+/* Nav links (Demo · Our Philosophy · FAQ · Pricing) — one class for all four. */
 .topbarLink {
   font-family: 'DM Sans', sans-serif;
   font-size: 0.78rem;
@@ -73,14 +65,12 @@
 .topbarLink:hover { color: var(--ink); }
 
 /* Active page — the visual is derived straight from the semantic aria-current,
-   so the two can never drift. A permanent muted→ink shift (the same target as
-   hover); no underline, no weight change, no gold — in keeping with the
-   restraint of the bar. Gold stays reserved for eyebrows and exit arrows. */
+   so the two can never drift. A permanent muted→ink shift; no underline, weight
+   change, or gold — gold stays reserved for eyebrows and exit arrows. */
 .topbarLink[aria-current='page'] { color: var(--ink); }
 
 /* Custom account trigger — replaces Clerk's UserButton avatar so the
-   silhouette colour can be driven by our own tokens (--muted / --ink).
-   Clicking still opens the Clerk profile via openUserProfile(). */
+   silhouette colour can be driven by our own tokens (--muted / --ink). */
 .accountBtn {
   display: flex;
   align-items: center;
@@ -98,8 +88,7 @@
 .accountBtn:hover { border-color: var(--ink); }
 
 /* Sign in — shown to logged-out users in the same slot as the account icon.
-   Compact so it stays within the navbar's 32px content band (matching the
-   icon's height), keeping the bar locked at 68px in both states. */
+   Compact so it stays within the navbar's 32px content band. */
 .signInBtn {
   font-family: 'DM Sans', sans-serif;
   font-size: 0.875rem;
@@ -114,13 +103,90 @@
 }
 .signInBtn:hover { border-color: var(--ink); }
 
-/* Mobile — tighten horizontal padding and the link gap so the longer row fits
-   on one line as far down as possible before flex-wrap takes over. */
-@media (max-width: 600px) {
-  .topbar {
-    padding: 14px 20px;
-  }
-  .topbarRight {
-    gap: 12px;
-  }
+/* ─────────────────────────────────────────────
+   Mobile menu (≤768px)
+───────────────────────────────────────────── */
+
+/* Hamburger / close toggle — hidden on desktop. Thin 1.6 stroke to match the
+   account and sidebar icons; the glyph swaps hamburger ⇄ X on open (a direct
+   swap, no morph — the honest behaviour, like the +/− on /faq). */
+.menuToggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s;
+}
+.menuToggle:hover { color: var(--ink); }
+.menuToggle:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Drop panel — a full-width extension of the bar, not a fullscreen takeover:
+   four links don't warrant one. Absolutely positioned under the sticky bar
+   (which is its containing block), so it hangs just below the bottom hairline.
+   Paper ground + a soft shadow lift it off the page; no scrim. */
+.mobileMenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: var(--paper);
+  border-bottom: 1px solid var(--rule);
+  box-shadow: 0 6px 20px rgba(13, 13, 13, 0.07);
+  padding: 4px 20px 16px;
+  animation: menuIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes menuIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* Each link is a full-width row with a generous tap target. Hairline between
+   rows; the last row's rule doubles as the divider above the auth slot. Active
+   page in ink via the same aria-current the desktop links use. */
+.mobileLink {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  color: var(--muted);
+  text-decoration: none;
+  border-bottom: 1px solid var(--rule);
+  transition: color 0.15s;
+}
+.mobileLink:hover { color: var(--ink); }
+.mobileLink[aria-current='page'] { color: var(--ink); }
+
+/* Auth sits below the link list; the buttons reuse their existing styles. */
+.mobileAuth {
+  padding-top: 16px;
+}
+
+/* ≤768px — swap the desktop row for the hamburger. 768px keeps the desktop row
+   uncramped even on /demo (badge + all links + Sign in need ~642px). */
+@media (max-width: 768px) {
+  .topbar { padding: 14px 20px; }
+  .topbarRight { display: none; }
+  .menuToggle { display: flex; }
+}
+
+/* ≥769px — belt-and-braces: if the menu was left open while resizing up to
+   desktop, keep the panel hidden (the toggle is already gone there). */
+@media (min-width: 769px) {
+  .mobileMenu { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mobileMenu { animation: none; }
 }
