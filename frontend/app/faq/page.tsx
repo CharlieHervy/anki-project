@@ -39,7 +39,7 @@ const clusters: Cluster[] = [
         a: (
           <>
             Not to generate cards. The upload, generation, and review flow works
-            entirely inside Dimindo. You only need Anki when you want to review your cards:
+            entirely inside Dimindo. You only need Anki when you want to go through your cards:
             Dimindo exports a ready-to-import .apkg file. Anki is free and
             available at {ankiweb}.
           </>
@@ -49,7 +49,7 @@ const clusters: Cluster[] = [
         q: 'Does Dimindo replace Anki?',
         a: (
           <>
-            No. Dimindo handles the work that comes before studying — reading
+            No. Dimindo handles the work that comes before revision — reading
             your source material, building well-structured cards, and letting you
             review and edit them before export. The actual spaced repetition,
             scheduling and long-term retention, happens in Anki. The two tools
