@@ -15,7 +15,7 @@ import DemoExperience from '../components/DemoExperience'
 export default function DemoPage() {
   return (
     <div className="demo-root">
-      <Navbar badge="Live demo" />
+      <Navbar />
 
       <DemoExperience
         endSlot={

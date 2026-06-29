@@ -53,18 +53,7 @@ export default function WelcomePage() {
           color: var(--ink);
           text-decoration: none;
         }
-        .welcome-nav-badge {
-          font-family: 'DM Mono', monospace;
-          font-size: 0.68rem;
-          letter-spacing: 0.12em;
-          text-transform: uppercase;
-          color: var(--muted);
-          border: 1px solid var(--rule);
-          padding: 3px 8px;
-          border-radius: 2px;
-        }
-
-        /* Dynamic CTA — revealed once a subject is chosen. A muted text link with
+/* Dynamic CTA — revealed once a subject is chosen. A muted text link with
            a gold arrow, not a solid button: a navbar button would shout and
            compete with the demo itself, which is the real selling moment. Fades
            in on appearance (reduced-motion disables it). */
@@ -108,7 +97,6 @@ export default function WelcomePage() {
       <header className="welcome-nav">
         <div className="welcome-nav-left">
           <Link href="/" className="welcome-nav-wordmark">Dimindo</Link>
-          <span className="welcome-nav-badge">Live demo</span>
         </div>
 
         {started && (

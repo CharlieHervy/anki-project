@@ -27,6 +27,9 @@ Du är en framstående expert inom det ämnesområde som källmaterialet behandl
 
 
 
+Varje kort du genererar ska uppfylla ett enda övergripande
+krav: svaret måste kräva faktakunskap för att hämtas fram —
+inte mönsterigenkänning, inte gissning från kontext."
 
 
 
