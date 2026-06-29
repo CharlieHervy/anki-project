@@ -385,11 +385,21 @@ export default function DemoExperience({ onStartedChange, endSlot }: DemoExperie
           overflow-y: auto;
           background: white;
         }
-        .demo-stage--review .demo-source-panel {
-          position: sticky;
-          top: 68px;
-          height: calc(100vh - 68px);
-          overflow-y: auto;
+        /* Sticky two-column behaviour belongs to DESKTOP ONLY. This rule used to
+           live unguarded, after the max-width:700px block, so on mobile it won
+           the cascade (identical specificity, later in source order) and forced
+           the source panel to position:sticky + height:calc(100vh - 68px) —
+           a full-viewport scroll box that hid the cards beneath it. Gating it
+           behind min-width:701px makes the two breakpoints mutually exclusive,
+           so source order no longer matters and the mobile reset above wins on
+           phones. Do NOT remove the media wrapper. */
+        @media (min-width: 701px) {
+          .demo-stage--review .demo-source-panel {
+            position: sticky;
+            top: 68px;
+            height: calc(100vh - 68px);
+            overflow-y: auto;
+          }
         }
 
         .demo-panel-label {
