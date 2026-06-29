@@ -373,9 +373,8 @@ export default function DemoExperience({ onStartedChange, endSlot }: DemoExperie
           .demo-stage--review { grid-template-columns: 1fr; height: auto; }
           .demo-stage--review .demo-source-panel {
             position: static;
-            height: 45vh;
-            overflow-y: auto;
-            -webkit-overflow-scrolling: touch;
+            height: auto;
+            overflow: visible;
           }
         }
 
