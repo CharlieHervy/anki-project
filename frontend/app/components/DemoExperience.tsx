@@ -371,6 +371,11 @@ export default function DemoExperience({ onStartedChange, endSlot }: DemoExperie
         @media (max-width: 700px) {
           .demo-stage,
           .demo-stage--review { grid-template-columns: 1fr; height: auto; }
+          .demo-stage--review .demo-source-panel {
+            position: static;
+            height: auto;
+            overflow-y: visible;
+          }
         }
 
         /* ---- Source panel ---- */
