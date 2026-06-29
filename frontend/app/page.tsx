@@ -652,7 +652,7 @@ export default function Home() {
   // Muted sub-line under the counter: when/that Quick Refill applies.
   function quotaSuffix(): string | null {
     if (!quota) return null
-    if (quota.plan === 'free' && quota.quick_refill_remaining > 0) {
+    if (quota.plan === 'free' && quota.lifetime_remaining > 0 && quota.quick_refill_remaining > 0) {
       return 'Quick Refill activates after 2,000'
     }
     if (
