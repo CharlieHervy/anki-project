@@ -127,9 +127,6 @@ export default function WelcomePage() {
             <Link href="/" className="demo-cta-btn">
               Upload your own material →
             </Link>
-            <span className="demo-cta-note">
-              Sign in only required when you generate your deck.
-            </span>
           </div>
         }
       />
