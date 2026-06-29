@@ -1427,12 +1427,9 @@ Den process där växter omvandlar ljusenergi till kemisk energi kallas {{c1::fo
 
 
 <source_material>
-**Innehåll att bearbeta:**
-Primär källa - Lärarens material:
+
 [SOURCE_MATERIAL]
 
-Kontextuell förstärkning (Sekundär källa - Wikipedia):
-[WIKIPEDIA_CONTENT]
 </source_material>
 """
 
@@ -1446,7 +1443,7 @@ def generate_cards_stream(source_material: str, language: str = "English"):
     static_prompt = MASTER_PROMPT.replace(
         "[SOURCE_MATERIAL]",
         "[Källmaterialet tillhandahålls i nästa system-block nedan]"
-    ).replace("[WIKIPEDIA_CONTENT]", "")
+    )
 
     with client.beta.messages.stream(
         model=CLAUDE_MODEL,
