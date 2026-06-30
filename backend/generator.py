@@ -990,6 +990,11 @@ Column position is semantic — empty columns are valid values and their
 tabs are never omitted. A card with no marking still ends with its
 trailing tab and an empty fourth column.
 
+Here "[TAB]" denotes the literal tab character (ASCII 0x09) — never
+the four-character text "[TAB]". Every column separator in the actual
+output, including in the worked example below, is a real tab
+keystroke.
+
 **Text** — the statement, with the `{{c1::…}}` cloze deletion placed
 according to the design principles, ending in a period.
 
@@ -1068,9 +1073,9 @@ A complete, valid output for a short English source on photosynthesis:
 
 TITLE: Photosynthesis
 #separator:tab
-The process by which plants convert light energy into chemical energy is called {{c1::photosynthesis}}.[TAB]Photosynthesis underpins nearly all life by producing both the oxygen and the glucose on which food chains depend.[TAB][TAB]
-The specific location inside the plant cell where photosynthesis occurs is the {{c1::chloroplast}}.[TAB]Chloroplasts contain the chlorophyll that absorbs sunlight, acting as the cell's solar collectors.[TAB][TAB]
-The pigment in chloroplasts that absorbs light most strongly in the blue and red wavelengths is {{c1::chlorophyll a}}.[TAB]Chlorophyll a is the primary photosynthetic pigment, directly driving the light-dependent reactions while accessory pigments only pass energy to it.[TAB][TAB]EXTERNAL: External addition
+The process by which plants convert light energy into chemical energy is called {{c1::photosynthesis}}.	Photosynthesis underpins nearly all life by producing both the oxygen and the glucose on which food chains depend.		
+The specific location inside the plant cell where photosynthesis occurs is the {{c1::chloroplast}}.	Chloroplasts contain the chlorophyll that absorbs sunlight, acting as the cell's solar collectors.		
+The pigment in chloroplasts that absorbs light most strongly in the blue and red wavelengths is {{c1::chlorophyll a}}.	Chlorophyll a is the primary photosynthetic pigment, directly driving the light-dependent reactions while accessory pigments only pass energy to it.		EXTERNAL: External addition
 
 The first two cards carry no flag and end with an empty fourth column;
 the third adds a fact absent from the source and is flagged EXTERNAL.
