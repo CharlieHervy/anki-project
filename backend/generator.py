@@ -2,7 +2,7 @@ import anthropic
 import os
 
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
-CLAUDE_MODEL = "claude-sonnet-4-6"
+CLAUDE_MODEL = "claude-opus-4-8"
 
 MASTER_PROMPT = """
 <role>
