@@ -1101,8 +1101,10 @@ def generate_cards_stream(source_material: str, language: str = "English"):
         model=CLAUDE_MODEL,
         max_tokens=16000,
         thinking={
-            "type": "enabled",
-            "budget_tokens": 10000
+            "type": "adaptive"
+        },
+        output_config={
+            "effort": "high"
         },
         system=[
             {
