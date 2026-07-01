@@ -731,7 +731,7 @@ export default function Home() {
     ].filter(Boolean).join(' ')}>
 
       {/* ── Topbar (shared) ── */}
-      <Navbar />
+      <Navbar onLogoClick={state !== 'upload' ? handleNewDeck : undefined} />
 
       <div className={styles.content}>
 

@@ -34,7 +34,7 @@ const navLinks = [
   { href: '/pricing', label: 'Pricing' },
 ]
 
-export default function Navbar({ badge }: { badge?: string }) {
+export default function Navbar({ badge, onLogoClick }: { badge?: string; onLogoClick?: () => void }) {
   const { user, isLoaded } = useUser()
   const { openSignIn, openUserProfile } = useClerk()
   const pathname = usePathname()
@@ -128,7 +128,7 @@ export default function Navbar({ badge }: { badge?: string }) {
           "Live demo"). With no badge it holds the wordmark alone. */}
       <div className={styles.topbarLeft}>
         {/* Logo navigates home — excluded from active-state (it's a logo). */}
-        <Link href="/" className={styles.wordmark}>
+        <Link href="/" className={styles.wordmark} onClick={onLogoClick}>
           Dimindo
         </Link>
         {badge && <span className={styles.badge}>{badge}</span>}
