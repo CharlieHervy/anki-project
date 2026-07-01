@@ -1171,7 +1171,7 @@ def parse_tsv(tsv_text: str) -> list[dict]:
             "text":     text,
             "extra":    extra,
             "tags":     "",           # Taggar ingår inte i det nya formatet
-            "deck":     "Huvudmeny",  # Kortlek ingår inte i det nya formatet
+            "deck":     "",  # Kortlek ingår inte i det nya formatet
             "logg":     logg,
             "approved": True
         })
