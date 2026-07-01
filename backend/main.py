@@ -736,7 +736,7 @@ async def export(
             "text": c.text,
             "extra": c.extra or "",
             "tags": c.tags or "",
-            "deck": c.deck or "Huvudmeny",
+            "deck": c.deck or "",
             "logg": c.logg or "",
             "bild": ""
         }
