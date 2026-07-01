@@ -228,7 +228,8 @@ export default function Home() {
         setCards(loaded)
         // Pre-fill the deck name from the loaded session so the field reflects
         // the stored name (avoids an empty field overwriting it on blur).
-        setDeckName(loaded[0]?.deck ?? '')
+        const storedDeck = loaded[0]?.deck ?? ''
+        setDeckName(storedDeck === 'Huvudmeny' ? '' : storedDeck)
         setSessionId(sid)
         setState('review')
         fetch(`${API}/api/sessions/${sid}/source`, {
