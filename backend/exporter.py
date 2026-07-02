@@ -1,16 +1,11 @@
 import genanki
 import random
 
-
-def generate_model_id() -> int:
-    """
-    Stabilt modell-ID — ändra aldrig detta värde utan att återskapa
-    alla befintliga kortlekar, annars uppstår duplicerade modeller i Anki.
-    """
-    return 1607392319
+CLOZE_MODEL_ID = 1607392319
+BASIC_MODEL_ID = 1607392320
 
 
-def create_anki_model() -> genanki.Model:
+def create_cloze_model() -> genanki.Model:
     """
     Skapar Anki-kortmallen med Dimindo-designsystemet.
 
@@ -100,7 +95,7 @@ def create_anki_model() -> genanki.Model:
 </div>"""
 
     return genanki.Model(
-        generate_model_id(),
+        CLOZE_MODEL_ID,
         'Dimindo_Cloze',
         fields=[
             {'name': 'Text'},
@@ -120,12 +115,83 @@ def create_anki_model() -> genanki.Model:
     )
 
 
+def create_basic_model() -> genanki.Model:
+    """
+    Dimindo_Basic notetype for Q&A cards.
+    Front = question (Text field), Back = answer (Extra field).
+    Uses the same CSS as Dimindo_Cloze for visual consistency.
+    Stable model ID — never change BASIC_MODEL_ID once cards are in the wild.
+    """
+    css = """
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+
+.card {
+  background-color: #f7f5f0 !important;
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: 16px;
+  color: #0d0d0d;
+  padding: 24px 16px;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+.dimindo-card {
+  background: #ffffff !important;
+  border: 1px solid #d8d3c8;
+  border-radius: 4px;
+  padding: 20px 22px;
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: left;
+  font-size: 0.9rem;
+  line-height: 1.65;
+  color: #0d0d0d;
+}
+
+.extra-text {
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 300;
+  font-size: 0.82rem;
+  color: #8a8478;
+  line-height: 1.55;
+  border-top: 1px solid #ede9e1;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+"""
+
+    qfmt = '<div class="dimindo-card">{{Front}}</div>'
+    afmt = """<div class="dimindo-card">{{Front}}
+{{#Back}}
+<div class="extra-text">{{Back}}</div>
+{{/Back}}
+</div>"""
+
+    return genanki.Model(
+        BASIC_MODEL_ID,
+        'Dimindo_Basic',
+        fields=[
+            {'name': 'Front'},
+            {'name': 'Back'},
+            {'name': 'Logg'},
+        ],
+        templates=[{
+            'name': 'Dimindo_Basic',
+            'qfmt': qfmt,
+            'afmt': afmt,
+        }],
+        css=css,
+        model_type=genanki.Model.FRONT_BACK
+    )
+
+
 def export_to_apkg(cards: list[dict], output_path: str) -> str:
     """
     Tar en lista av godkända kort och exporterar till .apkg-fil.
     Grupperar kort per kortlek (deck-fältet). Returnerar output_path.
     """
-    model = create_anki_model()
+    cloze_model = create_cloze_model()
+    basic_model = create_basic_model()
 
     decks_dict: dict[str, genanki.Deck] = {}
     for card in cards:
@@ -134,16 +200,27 @@ def export_to_apkg(cards: list[dict], output_path: str) -> str:
             deck_id = random.randrange(1 << 30, 1 << 31)
             decks_dict[deck_name] = genanki.Deck(deck_id, deck_name)
 
-        note = genanki.Note(
-            model=model,
-            fields=[
-                card.get('text', ''),
-                card.get('extra', ''),
-                card.get('logg', ''),   # Skickas till Logg-fältet men renderas ej
-                card.get('bild', ''),
-            ],
-            tags=[card.get('tags', '')] if card.get('tags') else []
-        )
+        if card.get('card_type') == 'qa':
+            note = genanki.Note(
+                model=basic_model,
+                fields=[
+                    card.get('text', ''),
+                    card.get('extra', ''),
+                    card.get('logg', ''),
+                ],
+                tags=[card.get('tags', '')] if card.get('tags') else []
+            )
+        else:
+            note = genanki.Note(
+                model=cloze_model,
+                fields=[
+                    card.get('text', ''),
+                    card.get('extra', ''),
+                    card.get('logg', ''),
+                    card.get('bild', ''),
+                ],
+                tags=[card.get('tags', '')] if card.get('tags') else []
+            )
         decks_dict[deck_name].add_note(note)
 
     package = genanki.Package(list(decks_dict.values()))

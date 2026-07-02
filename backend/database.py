@@ -40,6 +40,7 @@ class CardModel(Base):
     deck = Column(String)
     logg = Column(String)
     approved = Column(Boolean, default=True)
+    card_type = Column(String, default='cloze')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     session = relationship("SessionModel", back_populates="cards")
 

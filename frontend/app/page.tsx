@@ -17,6 +17,7 @@ type Card = {
   deck: string
   logg: string
   approved: boolean
+  card_type: 'cloze' | 'qa'
 }
 
 type AiMessage = { role: 'user' | 'assistant'; content: string }
@@ -357,7 +358,7 @@ export default function Home() {
               currentSessionId = event.session_id
               setSessionId(currentSessionId)
             } else if (event.type === 'card') {
-              setStreamCards(prev => [...prev, { ...event.data, approved: true, tags: '', deck: '' }])
+              setStreamCards(prev => [...prev, { ...event.data, approved: true, tags: '', deck: '', card_type: event.data.card_type ?? 'cloze' }])
             } else if (event.type === 'done') {
               stopTimer()
               setStreamDone(true)
@@ -1025,7 +1026,9 @@ export default function Home() {
                     {editingIndex === i ? (
                       <div className={styles.editForm}>
                         <div className={styles.fieldGroup}>
-                          <label className={styles.fieldLabel}>Cloze text</label>
+                          <label className={styles.fieldLabel}>
+                            {card.card_type === 'qa' ? 'Question' : 'Cloze text'}
+                          </label>
                           <textarea
                             className={styles.fieldTextarea}
                             rows={3}
@@ -1036,7 +1039,9 @@ export default function Home() {
                           />
                         </div>
                         <div className={styles.fieldGroup}>
-                          <label className={styles.fieldLabel}>Back extra</label>
+                          <label className={styles.fieldLabel}>
+                            {card.card_type === 'qa' ? 'Answer' : 'Back extra'}
+                          </label>
                           <textarea
                             className={styles.fieldTextarea}
                             rows={2}
@@ -1078,29 +1083,52 @@ export default function Home() {
                           </button>
                         </div>
 
-                        {/* Zone 1 + Zone 2 — shared white panel, hairline between */}
-                        {showPanel && (
-                          <div
-                            className={`${styles.cardPanel} ${styles.cardPanelEditable}`}
-                            onClick={() => startEditing(i)}
-                          >
-                            <div className={styles.clozeZone}>
-                              <p
-                                className={styles.cardTextContent}
-                                dangerouslySetInnerHTML={{
-                                  __html: (card.text || '').replace(
-                                    /\{\{c1::(.*?)\}\}/g,
-                                    '<strong>$1</strong>'
-                                  ),
-                                }}
-                              />
-                            </div>
-                            {card.extra.trim() && (
-                              <div className={styles.extraZone}>
-                                <p className={styles.cardExtra}>{card.extra}</p>
+                        {card.card_type === 'qa' ? (
+                          /* Q&A — two separate white boxes (question / answer)
+                             split by a 2px beige gap. Clickable-to-edit like the
+                             cloze panel. */
+                          showPanel && (
+                            <div
+                              className={`${styles.qaPanel} ${styles.cardPanelEditable}`}
+                              onClick={() => startEditing(i)}
+                            >
+                              <div className={styles.qaQuestion}>
+                                <p className={styles.cardTextContent}>
+                                  <span className={styles.qaPrefix}>Q ·</span> {card.text}
+                                </p>
                               </div>
-                            )}
-                          </div>
+                              <div className={styles.qaAnswer}>
+                                <p className={styles.cardTextContent}>
+                                  <span className={styles.qaPrefix}>A ·</span> {card.extra}
+                                </p>
+                              </div>
+                            </div>
+                          )
+                        ) : (
+                          /* Zone 1 + Zone 2 — shared white panel, hairline between */
+                          showPanel && (
+                            <div
+                              className={`${styles.cardPanel} ${styles.cardPanelEditable}`}
+                              onClick={() => startEditing(i)}
+                            >
+                              <div className={styles.clozeZone}>
+                                <p
+                                  className={styles.cardTextContent}
+                                  dangerouslySetInnerHTML={{
+                                    __html: (card.text || '').replace(
+                                      /\{\{c1::(.*?)\}\}/g,
+                                      '<strong>$1</strong>'
+                                    ),
+                                  }}
+                                />
+                              </div>
+                              {card.extra.trim() && (
+                                <div className={styles.extraZone}>
+                                  <p className={styles.cardExtra}>{card.extra}</p>
+                                </div>
+                              )}
+                            </div>
+                          )
                         )}
 
                         {/* Zone 3 — log: separate block, never editable */}

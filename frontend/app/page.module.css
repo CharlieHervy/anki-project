@@ -688,6 +688,39 @@
   line-height: 1.55;
 }
 
+/* ── Q&A card variant ──
+   Two separate white boxes (question / answer) inside the beige card shell,
+   split by a 2px gap that reveals the shell colour (#ebe7dc) as the divider —
+   no border, no rule. Rounded outer corners only; inner corners meet flush
+   across the gap. Shares .cardTextContent typography with the cloze panel and
+   .cardPanelEditable for the click-to-edit affordance. */
+.qaPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.qaQuestion {
+  background: white;
+  border-radius: 4px 4px 0 0;
+  padding: 14px 16px;
+}
+
+.qaAnswer {
+  background: white;
+  border-radius: 0 0 4px 4px;
+  padding: 14px 16px;
+}
+
+/* "Q ·" / "A ·" — muted monospace prefix, inline with the field text.
+   UI-only, never part of the stored data. */
+.qaPrefix {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
 /* ── Zone 3 — log: separate white block, beige gap above. Gold, DM Mono,
    never editable. De-chromatises to --muted when the card is rejected. ── */
 .loggZone {

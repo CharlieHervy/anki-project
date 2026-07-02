@@ -311,6 +311,7 @@ async def generate(
                         tags=card.get('tags', ''),
                         deck=card.get('deck', ''),
                         logg=card.get('logg', ''),
+                        card_type=card.get('card_type', 'cloze'),
                         approved=True
                     )
                     db2.add(db_card)
@@ -677,6 +678,7 @@ async def get_cards(
             "deck": c.deck,
             "logg": c.logg,
             "approved": c.approved,
+            "card_type": c.card_type or 'cloze',
             "id": str(c.id)
         }
         for c in cards
@@ -738,7 +740,8 @@ async def export(
             "tags": c.tags or "",
             "deck": c.deck or "",
             "logg": c.logg or "",
-            "bild": ""
+            "bild": "",
+            "card_type": c.card_type or 'cloze'
         }
         for c in cards
     ]
