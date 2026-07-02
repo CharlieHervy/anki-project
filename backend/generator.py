@@ -1427,10 +1427,10 @@ EXTERNAL flag; the fourth is a Q&A card.
 
 TITLE: Enzyme Inhibition
 #separator:tab
-The type of enzyme inhibition in which the inhibitor competes with the substrate for the active site is called {{c1::competitive inhibition}}.[TAB]Competitive inhibition can be overcome by raising the substrate concentration, which is a diagnostic criterion for identifying it.[TAB][TAB][TAB]cloze
-The Michaelis-Menten parameter that remains unchanged under competitive inhibition is {{c1::Vmax}}.[TAB]Vmax is preserved because a high enough substrate concentration displaces the inhibitor from the active site.[TAB][TAB][TAB]cloze
-The allosteric site to which a non-competitive inhibitor binds is located separately from the {{c1::active site}}.[TAB]Binding away from the active site is why non-competitive inhibition leaves substrate affinity, and therefore Km, unchanged.[TAB][TAB]EXTERNAL: External addition[TAB]cloze
-Why does raising the substrate concentration strengthen uncompetitive inhibition rather than relieve it?[TAB]The inhibitor binds only to the enzyme-substrate complex, so more substrate forms more complex, creating more binding sites for the inhibitor.[TAB][TAB]EXTERNAL: External addition[TAB]qa
+The type of enzyme inhibition in which the inhibitor competes with the substrate for the active site is called {{c1::competitive inhibition}}.  Competitive inhibition can be overcome by raising the substrate concentration, which is a diagnostic criterion for identifying it.           cloze
+The Michaelis-Menten parameter that remains unchanged under competitive inhibition is {{c1::Vmax}}. Vmax is preserved because a high enough substrate concentration displaces the inhibitor from the active site.           cloze
+The allosteric site to which a non-competitive inhibitor binds is located separately from the {{c1::active site}}.  Binding away from the active site is why non-competitive inhibition leaves substrate affinity, and therefore Km, unchanged. EXTERNAL: External addition cloze
+Why does raising the substrate concentration strengthen uncompetitive inhibition rather than relieve it?    The inhibitor binds only to the enzyme-substrate complex, so more substrate forms more complex, creating more binding sites for the inhibitor.  EXTERNAL: External addition qa
 
 
 The first three rows are cloze and carry card_type `cloze`; the fourth
