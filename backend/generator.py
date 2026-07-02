@@ -1472,7 +1472,7 @@ def generate_cards_stream(source_material: str, language: str = "English"):
             "type": "adaptive"
         },
         output_config={
-            "effort": "high"
+            "effort": "xhigh"
         },
         system=[
             {
