@@ -1779,6 +1779,12 @@ def review_cards(source_material: str, cards: list[dict]) -> list[int]:
         type_counts[ft] = type_counts.get(ft, 0) + 1
     if type_counts:
         logger.info(f"review_cards failure_type distribution: {type_counts}")
+    for item in failed_cards:
+        logger.info(
+            f"review_cards REJECTED card={item.get('index')} "
+            f"type={item.get('failure_type')} "
+            f"reason={item.get('explanation')}"
+        )
 
     indices = []
     for item in failed_cards:

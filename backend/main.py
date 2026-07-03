@@ -1,8 +1,11 @@
 import os
 import uuid
 import json
+import logging
 import tempfile
 import stripe
+
+logging.basicConfig(level=logging.INFO)
 from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client, Client
