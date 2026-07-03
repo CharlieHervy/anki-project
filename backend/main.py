@@ -244,15 +244,23 @@ async def generate(
         thread.start()
 
         try:
+            silence_seconds = 0
+            MAX_SILENCE = 600
+
             while True:
                 try:
                     item = await asyncio.get_event_loop().run_in_executor(
                         None,
-                        lambda: chunk_queue.get(timeout=120)
+                        lambda: chunk_queue.get(timeout=15)
                     )
+                    silence_seconds = 0
                 except queue.Empty:
-                    yield f"data: {json.dumps({'type': 'error', 'message': 'Timeout – ingen respons från Claude.'})}\n\n"
-                    return
+                    silence_seconds += 15
+                    if not thread.is_alive() or silence_seconds >= MAX_SILENCE:
+                        yield f"data: {json.dumps({'type': 'error', 'message': 'Timeout – ingen respons från Claude.'})}\n\n"
+                        return
+                    yield ": keepalive\n\n"
+                    continue
 
                 if item is DONE_SENTINEL:
                     break
