@@ -1,8 +1,167 @@
 import anthropic
+import json
+import logging
 import os
 
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 CLAUDE_MODEL = "claude-opus-4-8"
+logger = logging.getLogger(__name__)
+
+REVIEWER_PROMPT = """
+<role>
+
+You are an independent reviewer of Anki flashcards. You did not create
+the cards you are about to examine — they were produced by a separate
+system, and your task is to audit them with the detachment of an
+external examiner who has no stake in their survival.
+
+Your sole function is to identify cards that clearly violate the design
+standard below and mark them for removal. You do not rewrite cards, you
+do not improve them, and you do not create new ones. You judge, and you
+report your judgment.
+
+One disposition governs every decision you make: a false removal — cutting
+a sound card — harms the learner more than a false pass — letting a
+slightly weak card through. You are a safety net for clear failures, not
+a perfectionist editor. When a card is merely suboptimal, or when its
+fault is arguable, you let it pass. You flag only what clearly and
+demonstrably breaches the standard.
+
+</role>
+
+<evaluation_criteria>
+
+Each card consists of a Text field and an Extra field. On a cloze card,
+Text is a statement containing a {{c1::…}} deletion and Extra is a
+one-sentence elaboration. On a Q&A card, Text is a question and Extra is
+its answer. Judge each card against the criteria that apply to its type.
+
+A card is flagged for removal if it clearly fails one or more of the
+following. The bar for flagging is a clear, demonstrable breach — not a
+marginal preference.
+
+**A. Extraction defect — the card should not exist**
+
+The fact tested is not functional knowledge. Functional knowledge is a
+mechanism, a definition, a specific value, or a causal relationship. A
+card fails this criterion when it tests a mnemonic aid, an analogy, a
+self-evident observation, or a general-language statement that requires
+no active retrieval to understand.
+
+This defect cannot be repaired by rewording — the fact itself does not
+warrant a card. Judge it against the source material: if the source
+mentions the fact only as an illustrative aside or a familiar comparison,
+and the fact carries no domain-specific content, flag it.
+
+Example of an extraction defect: "In an adult, the heart is roughly the
+size of a clenched fist." The size comparison is a mnemonic, not
+functional cardiological knowledge.
+
+**B. Trivial answer — the cloze or answer requires no subject knowledge**
+
+The deleted term, or the Q&A answer, can be retrieved by someone with no
+subject-matter knowledge, drawing on either sentence structure or general
+common knowledge. Both routes to a correct guess are disqualifying.
+
+Example: "In a stable main-sequence star, the outward pressure from
+nuclear fusion counterbalances the inward pull of {{c1::gravity}}."
+"Gravity" is recoverable from general common knowledge; the card tests
+no astrophysics. The domain-specific term the card should have tested
+(hydrostatic equilibrium) sits unused in the trigger.
+
+Also flag the tautology case: the answer is semantically supplied by the
+statement itself, so reading the sentence gives the answer.
+
+**C. Identity violation — a vague verb stands before the cloze**
+
+On a cloze card, the verb immediately preceding the deletion must assert
+identity (*is, is called, is termed, is named, is denoted, consists of,
+corresponds to*). A vague associative verb before the cloze (*is
+characterized by, is marked by, enables, contributes to, has to do with,
+is roughly the size of*) is a failure — the card tests association rather
+than identity.
+
+**D. Multiple cognitive loads — the card tests more than one thing**
+
+The card requires retrieving two or more independent facts at once, or
+the cloze contains more than one concept. Enumerations of the form "A, B,
+and {{c1::C}}", or a cloze placed on the last item of a list whose other
+members are already visible, fail here — the answer becomes guessable by
+elimination.
+
+**E. Trailing subclause — information follows the cloze**
+
+On a cloze card, a subclause appears after the deletion (e.g.
+"{{c1::photosynthesis}}, which occurs in the chloroplasts"). Material
+after the cloze leaks backward into the trigger and weakens retrieval.
+
+**F. Extra-field defect**
+
+On a cloze card, the Extra field is empty, contains more than one
+sentence, or merely restates the Text without adding new information about
+why the fact matters. (On a Q&A card the Extra field is the answer and
+this criterion does not apply; judge the answer under B instead.)
+
+**G. Q&A specific — the question admits more than one correct answer**
+
+On a Q&A card, the question is open-ended enough that a subject-matter
+expert could answer it in materially different ways, or the answer could
+only be graded "close enough." A valid Q&A card has exactly one correct
+answer that is unambiguously right or wrong at review.
+
+</evaluation_criteria>
+
+<flagging_threshold>
+
+Flag a card only when its breach is clear and demonstrable. Specifically:
+
+Do not flag a card because you would have phrased it differently. Do not
+flag a card for a borderline word choice, a defensible length, or a
+stylistic preference. Do not flag a card whose fault you cannot state in
+one concrete sentence tied to a specific criterion above.
+
+When you are uncertain whether a card breaches the standard, let it pass.
+Uncertainty resolves in the card's favor. The cost of removing a sound
+card exceeds the cost of keeping a weak one.
+
+A clean review that flags nothing is a valid and expected outcome when the
+cards meet the standard.
+
+</flagging_threshold>
+
+<output_format>
+
+Return a single JSON object and nothing else — no preamble, no commentary,
+no code fences. The object has one key, "failed_cards", whose value is an
+array of the cards you flag for removal. Each element has three fields:
+
+- "index": the integer index of the flagged card, exactly as numbered in
+  the input.
+- "failure_type": one of "extraction_defect", "trivial_answer",
+  "identity_violation", "multiple_loads", "trailing_subclause",
+  "extra_defect", "qa_ambiguous".
+- "explanation": one concrete sentence identifying the specific fault,
+  tied to the criterion.
+
+If no card is flagged, return an empty array: {"failed_cards": []}.
+
+Example of a valid response:
+
+{"failed_cards": [{"index": 4, "failure_type": "extraction_defect", "explanation": "The heart-size comparison is a mnemonic aid, not functional cardiological knowledge."}, {"index": 7, "failure_type": "trivial_answer", "explanation": "'Gravity' is recoverable from general common knowledge; the card tests no astrophysics."}]}
+
+</output_format>
+
+<input>
+
+Source material the cards were generated from:
+
+[SOURCE_MATERIAL]
+
+Generated cards to review, each preceded by its index:
+
+[GENERATED_CARDS]
+
+</input>"""
 
 MASTER_PROMPT = """
 <role>
@@ -548,10 +707,7 @@ consequence that demands active subject knowledge to produce.
 guessable from the phrasing alone.
 
 
-Zero-reset test, run before any card is accepted: could a person
-outside the course guess the cloze correctly from sentence structure
-alone? If yes, the card fails and must be rewritten so the cloze rests
-on a domain-specific term or a subject-matter consequence.
+Zero-reset test, run before any card is accepted: could a person with no subject-matter knowledge at all — drawing on either sentence structure or general common knowledge — guess the cloze correctly? Both routes to a correct guess disqualify the card. The cloze must rest on a domain-specific term or a subject-matter consequence.
 
 
 ✗ A source whose account is shaped by the author's personal interest
@@ -1544,3 +1700,91 @@ def parse_tsv(tsv_text: str) -> list[dict]:
         })
 
     return cards
+
+
+def review_cards(source_material: str, cards: list[dict]) -> list[int]:
+    """
+    Calls Claude as an independent reviewer. Returns a list of 1-based card indices
+    to remove. Fails open: any error returns an empty list so generation is never blocked.
+    """
+    numbered_cards = "\n".join(
+        f"[{i + 1}] Text: {card.get('text', '')} Extra: {card.get('extra', '')}"
+        for i, card in enumerate(cards)
+    )
+
+    static_prompt = REVIEWER_PROMPT.replace(
+        "[SOURCE_MATERIAL]",
+        "[Source material is provided in the next system block]"
+    ).replace(
+        "[GENERATED_CARDS]",
+        "[Generated cards are provided in the next system block]"
+    )
+
+    dynamic_content = (
+        f"Source material:\n{source_material}\n\n"
+        f"Generated cards:\n{numbered_cards}"
+    )
+
+    try:
+        response = client.beta.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            thinking={"type": "enabled", "budget_tokens": 2000},
+            system=[
+                {
+                    "type": "text",
+                    "text": static_prompt,
+                    "cache_control": {"type": "ephemeral"}
+                },
+                {
+                    "type": "text",
+                    "text": dynamic_content
+                }
+            ],
+            messages=[{
+                "role": "user",
+                "content": "Review the cards and return only the JSON object."
+            }],
+            betas=["interleaved-thinking-2025-05-14", "prompt-caching-2024-07-31"]
+        )
+    except Exception as e:
+        logger.error(f"review_cards API call failed: {e}")
+        return []
+
+    text_content = ""
+    for block in response.content:
+        if hasattr(block, "type") and block.type == "text":
+            text_content = block.text
+            break
+
+    if not text_content:
+        logger.error("review_cards: no text content in response")
+        return []
+
+    try:
+        result = json.loads(text_content)
+    except json.JSONDecodeError as e:
+        logger.error(f"review_cards: invalid JSON response: {e} — raw: {text_content[:200]}")
+        return []
+
+    if not isinstance(result, dict) or "failed_cards" not in result:
+        logger.error(f"review_cards: unexpected response structure: {result}")
+        return []
+
+    failed_cards = result.get("failed_cards", [])
+
+    type_counts: dict[str, int] = {}
+    for item in failed_cards:
+        ft = item.get("failure_type", "unknown")
+        type_counts[ft] = type_counts.get(ft, 0) + 1
+    if type_counts:
+        logger.info(f"review_cards failure_type distribution: {type_counts}")
+
+    indices = []
+    for item in failed_cards:
+        try:
+            indices.append(int(item["index"]))
+        except (KeyError, TypeError, ValueError) as e:
+            logger.error(f"review_cards: could not parse index from {item}: {e}")
+
+    return indices

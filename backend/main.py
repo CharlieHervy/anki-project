@@ -14,7 +14,7 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from sqlalchemy.orm import Session
-from generator import generate_cards_stream, parse_tsv
+from generator import generate_cards_stream, parse_tsv, review_cards
 from exporter import export_to_apkg
 from database import get_db, SessionModel, CardModel, DemoCard
 
@@ -298,6 +298,13 @@ async def generate(
                 no_cards_payload = json.dumps({'type': 'error', 'message': "We couldn't find anything to turn into cards. Try a text with clearer facts or statements."})
                 yield f"data: {no_cards_payload}\n\n"
                 return
+
+            yield f"data: {json.dumps({'type': 'reviewing'})}\n\n"
+
+            indices_to_remove = await asyncio.to_thread(review_cards, source_material, cards)
+            if indices_to_remove:
+                remove_set = set(indices_to_remove)
+                cards = [card for i, card in enumerate(cards) if (i + 1) not in remove_set]
 
             db2 = next(get_db())
             try:
