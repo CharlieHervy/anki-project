@@ -151,6 +151,7 @@ export default function Home() {
   const [cards, setCards] = useState<Card[]>([])
   const [streamCards, setStreamCards] = useState<Card[]>([])
   const [streamDone, setStreamDone] = useState(false)
+  const [isReviewing, setIsReviewing] = useState(false)
   const [error, setError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
@@ -322,6 +323,7 @@ export default function Home() {
     setState('generating')
     setStreamCards([])
     setStreamDone(false)
+    setIsReviewing(false)
     setQuotaExceeded(false)
     setError('')
     startTimer()
@@ -359,6 +361,8 @@ export default function Home() {
               setSessionId(currentSessionId)
             } else if (event.type === 'card') {
               setStreamCards(prev => [...prev, { ...event.data, approved: true, tags: '', deck: '', card_type: event.data.card_type ?? 'cloze' }])
+            } else if (event.type === 'reviewing') {
+                setIsReviewing(true)
             } else if (event.type === 'done') {
               stopTimer()
               setStreamDone(true)
@@ -914,15 +918,17 @@ export default function Home() {
                 <div className={styles.streamHeader}>
                   <p className={styles.streamLabel}>
                     <span className={streamDone ? styles.scanDotDone : styles.scanDot} />
-                    {streamDone
-                      ? `DONE — ${streamCards.length} CARDS GENERATED`
-                      : 'ANALYSING SOURCE MATERIAL…'}
+                    {isReviewing
+                      ? 'Reviewing cards…'
+                      : streamDone
+                        ? `DONE — ${streamCards.length} CARDS GENERATED`
+                        : 'ANALYSING SOURCE MATERIAL…'}
                   </p>
                   <span className={styles.timer}>
                     {Math.floor(elapsedSeconds / 60)}:{String(elapsedSeconds % 60).padStart(2, '0')}
                   </span>
                 </div>
-                <div className={styles.streamCardsList}>
+                {!isReviewing && <div className={styles.streamCardsList}>
                   {streamCards.map((card, i) => {
                     const logg = loggDisplay(card.logg)
                     const showPanel = !!(card.text?.trim() || card.extra?.trim())
@@ -964,7 +970,7 @@ export default function Home() {
                       </div>
                     )
                   })}
-                </div>
+                </div>}
               </div>
             )}
           </>
