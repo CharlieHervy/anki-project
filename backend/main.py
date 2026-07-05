@@ -73,8 +73,12 @@ def validate_input_length(word_count: int, plan: str, qr_remaining: int = 0) -> 
     - free utan QR-krediter:  max 2 000 ord
     - free med QR-krediter:   max 3 000 ord (QR-poolens tak)
     - pro:                    max 9 000 ord
+    - admin:                  obegränsat
     - okänd plan:             strängaste taket (2 000 ord) som säkerhetsnät
     """
+    if plan == 'admin':
+        return True, ""
+
     if plan == 'free':
         if qr_remaining > 0:
             if word_count > 3000:
