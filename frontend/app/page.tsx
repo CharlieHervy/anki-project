@@ -47,6 +47,10 @@ type Quota =
       monthly_reset_at: string
       quick_refill_remaining: number
     }
+  | {
+      plan: 'admin'
+      quick_refill_remaining: number
+    }
 
 // Preset Study-Assistant questions, keyed by the same output-language values the
 // language <select> emits ('English' | 'Swedish' | 'German' | 'French' |
@@ -614,6 +618,7 @@ export default function Home() {
   // neutral placeholder rather than flashing a wrong limit.
   function effectiveWordLimit(): number | null {
     if (!quota) return null
+    if (quota.plan === 'admin') return 9000
     if (quota.plan === 'pro') {
       if (quota.monthly_remaining > 0) return 9000
       return quota.quick_refill_remaining > 0 ? 3000 : 9000
@@ -690,6 +695,7 @@ export default function Home() {
 
   function quotaIndicatorText(): string | null {
     if (!user || !quota) return null
+    if (quota.plan === 'admin') return null
     const refill = quota.quick_refill_remaining
     const refillSuffix = `${refill} Quick Refill generation${refill !== 1 ? 's' : ''} remaining`
 
