@@ -732,6 +732,8 @@ async def update_card_content(
         card.extra = body["extra"]
     if "deck" in body:
         card.deck = body["deck"]
+    if "approved" in body:
+        card.approved = body["approved"]
 
     db.commit()
     return {"ok": True}

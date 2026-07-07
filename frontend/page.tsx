@@ -147,7 +147,7 @@ useEffect(() => {
     updated[index].approved = !updated[index].approved
     setCards(updated)
     const card = updated[index]
-    await fetch(`${API}/api/cards/${sessionId}/${card.id}`, {
+    await fetch(`${API}/api/cards/${sessionId}/${card.id}/content`, {
       method: 'PATCH',
       headers: { ...authHeaders, 'Content-Type': 'application/json' },
       body: JSON.stringify({ approved: card.approved }),
