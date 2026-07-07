@@ -658,6 +658,11 @@ depends on it, has used it correctly. This is where the Elaborative
 Encoding principle is realized — the field exists to give the memory
 trace a causal anchor.
 
+The Extra field must never reproduce a sentence from the source material
+that was itself excluded from the card as a narrative bridge, course
+navigation note, or transitional remark. If no genuine causal context
+exists for the fact, construct one from subject knowledge rather than
+recycling source material that was rightly set aside.
 
 ---
 
