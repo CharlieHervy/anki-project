@@ -495,6 +495,25 @@ card and ask whether a subject-matter expert could supply more than
 one specific answer that fits the gap. If so, add categorical
 determination until exactly one answer remains.
 
+A specifically forbidden pattern is the example-frame cloze. When the
+source presents a fact in the form "X is an example of Y," it is
+forbidden to mirror that structure directly as a card. The phrasing
+guarantees a Jeopardy failure: any other instance of Y is an equally
+correct answer, so the trigger does not constrain the answer to a
+single concept.
+
+✗ An example of a homogeneous mixture in gas form is {{c1::air}}. —
+the trigger admits any homogeneous gas mixture; air is not the only
+correct answer, and it is recoverable from general knowledge.
+✓ The type of homogeneous mixture that atmospheric air is an instance
+of is {{c1::a gas mixture}}. — the category is the cloze, the
+instance serves as the trigger.
+
+When the source uses an example to illustrate a category, reformulate
+so that the category occupies the cloze and the example appears in the
+trigger. The example may also be moved to the Extra field if it serves
+better as a causal anchor than as a trigger element.
+
 
 ---
 
