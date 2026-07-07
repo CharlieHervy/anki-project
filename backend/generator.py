@@ -1647,9 +1647,9 @@ def generate_cards_stream(source_material: str, language: str = "English"):
 
     with client.beta.messages.stream(
         model=CLAUDE_MODEL,
-        max_tokens=32000,
+        max_tokens=64000,
         thinking={"type": "adaptive"},
-        output_config={"effort": "high"},
+        output_config={"effort": "xhigh"},
         system=[
             {
                 "type": "text",
