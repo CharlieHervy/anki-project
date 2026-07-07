@@ -1629,10 +1629,8 @@ def generate_cards_stream(source_material: str, language: str = "English"):
     with client.beta.messages.stream(
         model=CLAUDE_MODEL,
         max_tokens=32000,
-        thinking={
-            "type": "enabled",
-            "budget_tokens": 10000
-        },
+        thinking={"type": "adaptive"},
+        output_config={"effort": "high"},
         system=[
             {
                 "type": "text",
@@ -1652,7 +1650,7 @@ def generate_cards_stream(source_material: str, language: str = "English"):
                 "Omslut INTE outputen med kodblock eller backticks. Ingen hälsning, inget eftersnack."
             )
         }],
-        betas=["interleaved-thinking-2025-05-14", "prompt-caching-2024-07-31"]
+        betas=["prompt-caching-2024-07-31"]
     ) as stream:
         for event in stream:
             if hasattr(event, 'type'):
