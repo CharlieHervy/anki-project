@@ -1674,6 +1674,8 @@ def generate_cards_stream(source_material: str, language: str = "English"):
         for event in stream:
             if hasattr(event, 'type'):
                 print(f"[EVENT] {event.type}", flush=True)
+                if event.type == 'content_block_start':
+                    print(f"[BLOCK_START] {event.content_block}", flush=True)
                 if event.type == 'content_block_delta':
                     if hasattr(event.delta, 'type'):
                         print(f"[DELTA] {event.delta.type}", flush=True)
