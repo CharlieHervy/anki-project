@@ -1675,7 +1675,9 @@ def generate_cards_stream(source_material: str, language: str = "English"):
             if hasattr(event, 'type'):
                 if event.type == 'content_block_delta':
                     if hasattr(event.delta, 'type'):
-                        if event.delta.type == 'text_delta':
+                        if event.delta.type == 'thinking_delta':
+                            print(event.delta.thinking, end='', flush=True)
+                        elif event.delta.type == 'text_delta':
                             yield event.delta.text
 
 
@@ -1773,9 +1775,10 @@ def review_cards(source_material: str, cards: list[dict]) -> list[int]:
 
     text_content = ""
     for block in response.content:
-        if hasattr(block, "type") and block.type == "text":
+        if hasattr(block, "type") and block.type == "thinking":
+            print(f"[REVIEWER THINKING]\n{block.thinking}", flush=True)
+        elif hasattr(block, "type") and block.type == "text":
             text_content = block.text
-            break
 
     if not text_content:
         logger.error("review_cards: no text content in response")
