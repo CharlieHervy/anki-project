@@ -1684,6 +1684,14 @@ def generate_cards_stream(source_material: str, language: str = "English"):
                         elif event.delta.type == 'text_delta':
                             yield event.delta.text
 
+    final_message = stream.get_final_message()
+    usage = final_message.usage
+    logger.info(
+        f"[USAGE] input={usage.input_tokens} "
+        f"output={usage.output_tokens} "
+        f"cache_creation={getattr(usage, 'cache_creation_input_tokens', 0)} "
+        f"cache_read={getattr(usage, 'cache_read_input_tokens', 0)}"
+    )
 
 
 def parse_tsv(tsv_text: str) -> list[dict]:
