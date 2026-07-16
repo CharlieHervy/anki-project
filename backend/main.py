@@ -448,7 +448,7 @@ async def stripe_webhook(request: Request):
                 'user_id':                    user_id,
                 'plan':                       'pro',
                 'monthly_generations_used':   0,
-                'monthly_generations_limit':  30,
+                'monthly_generations_limit':  20,
                 'monthly_reset_at':           period_end,
             }).execute()
 
@@ -487,7 +487,7 @@ async def create_checkout(
     if product_type == 'quick_refill':
         price_data = {
             "currency": "usd",
-            "unit_amount": 299,  # $2.99 (cent)
+            "unit_amount": 599,  # $5.99 (cent)
             "product_data": {"name": "Dimindo Quick Refill — 5 generations"},
         }
         mode = "payment"

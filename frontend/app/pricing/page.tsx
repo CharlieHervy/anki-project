@@ -177,7 +177,7 @@ export default function Pricing() {
               <li className={styles.feature}>
                 <span className={styles.check}><CheckIcon /></span>
                 <span className={styles.featureText}>
-                  <strong>30</strong> generations per month
+                  <strong>20</strong> generations per month
                 </span>
               </li>
 
@@ -248,7 +248,7 @@ export default function Pricing() {
             </div>
             <div className={styles.addonRight}>
               <span className={styles.addonPrice}>
-                <span className={styles.currency}>$</span>2.99
+                <span className={styles.currency}>$</span>5.99
               </span>
               <button
                 className={styles.ghostBtn}
