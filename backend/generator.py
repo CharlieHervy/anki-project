@@ -592,6 +592,21 @@ a procedure, not an atomic value.
 in conversion to Islam is {{c1::two}}. — the cloze contains the atomic
 value; the identity verb connects directly.
 
+English-specific caution: the indefinite article ("a"/"an") immediately 
+preceding the cloze reveals the phonetic onset of the answer before it 
+is retrieved — "a" excludes vowel-sound answers, "an" excludes 
+consonant-sound answers. This is forbidden regardless of whether the 
+article is grammatically correct for the intended answer.
+
+Resolve by using "the" before the cloze wherever grammatically valid 
+(it carries no phonetic signal), or by including the indefinite article 
+inside the cloze itself when the answer requires one, so the learner 
+supplies it as part of knowing the term.
+
+✗ The structure formed here is called a {{c1::median}}. — leaks 
+consonant onset; would also leak if source concept required "an".
+✓ The structure formed here is called the {{c1::median}}.
+✓ The structure formed here is called {{c1::an altitude}}.
 
 ---
 
