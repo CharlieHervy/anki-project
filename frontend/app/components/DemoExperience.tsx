@@ -120,7 +120,7 @@ const DEMO_CARDS: Record<Subject, DemoCard[]> = {
     },
     {
       id: 'b2',
-      text: "The unit of three nucleotides in mRNA that specifies a single amino acid is called  {{c1::a codon}}.",
+      text: "The unit of three nucleotides in mRNA that specifies a single amino acid is called {{c1::a codon}}.",
       extra: "Codons form the dictionary of the genetic code, mapping each nucleotide triplet to one amino acid in the growing protein.",
       highlightPhrase: "codons",
       approved: true,
