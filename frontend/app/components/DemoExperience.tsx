@@ -33,22 +33,13 @@ interface DemoCard {
   extra: string
   highlightPhrase: string
   approved: boolean
-}
-
-// Shape returned by GET /api/demo/cards?subject={subject}
-interface ApiDemoCard {
-  id: string
-  text: string
-  extra: string
-  highlight_phrase: string   // snake_case from Supabase
-  approved: boolean
+  card_type?: 'cloze' | 'qa'
+  logg?: string
 }
 
 // ---------------------------------------------------------------------------
-// API + static subject metadata (source texts live here; cards are fetched)
+// Static subject metadata (source texts) + hardcoded demo cards
 // ---------------------------------------------------------------------------
-const API = 'https://anki-project-production.up.railway.app'
-
 const SUBJECT_META: Record<Subject, { label: string; sourceText: string }> = {
   biology: {
     label: 'Biology · Protein Synthesis',
@@ -56,32 +47,164 @@ const SUBJECT_META: Record<Subject, { label: string; sourceText: string }> = {
 
 During transcription, a segment of DNA is copied into messenger RNA (mRNA) by the enzyme RNA polymerase. The mRNA carries the genetic code from the nucleus to the ribosome.
 
-During translation, ribosomes read the mRNA sequence in units of three nucleotides called codons. Each codon specifies a particular amino acid. Transfer RNA (tRNA) molecules deliver the correct amino acids to the ribosome, where they are joined by peptide bonds to form a polypeptide chain.`,
+During translation, ribosomes read the mRNA sequence in units of three nucleotides called codons. Each codon specifies a particular amino acid. Transfer RNA (tRNA) molecules deliver the correct amino acids to the ribosome, where they are joined by peptide bonds to form a polypeptide chain. The sequence of amino acids in the chain is determined entirely by the sequence of codons in the mRNA.`,
   },
   history: {
     label: 'History · World War II',
-    sourceText: `World War II lasted from 1939 to 1945 and involved most of the world's nations. The war began when Germany invaded Poland on September 1, 1939, prompting Britain and France to declare war on Germany.
+    sourceText: `World War II lasted from 1939 to 1945 and involved most of the world's nations. The war began when Germany invaded Poland on September 3, 1939, prompting Britain and France to declare war on Germany.
 
 The conflict divided the world into two opposing alliances: the Allies and the Axis powers. A decisive turning point on the Eastern Front was the Battle of Stalingrad (1942–1943), in which German forces suffered a catastrophic defeat.
 
-In the Pacific, the United States entered the war after Japan's attack on Pearl Harbor on December 7, 1941. The war ended in Europe with Germany's unconditional surrender on May 8, 1945, known as V-E Day. The war ended globally when Japan surrendered on September 2, 1945, following the atomic bombings of Hiroshima and Nagasaki.`,
+In the Pacific, the United States entered the war after Japan's surprise attack on Pearl Harbor on December 7, 1941. The war ended in Europe with Germany's unconditional surrender on May 8, 1945, known as V-E Day. Japan surrendered on September 2, 1945, following the atomic bombings of Hiroshima and Nagasaki.`,
   },
   chemistry: {
     label: 'Chemistry · Atomic Structure',
-    sourceText: `An atom consists of a nucleus surrounded by electrons. The nucleus contains protons and neutrons. Protons carry a positive electrical charge, while neutrons carry no charge.
+    sourceText: `An atom consists of a nucleus surrounded by electrons. The nucleus contains protons and neutrons. Protons carry a positive electrical charge, neutrons carry no charge, and electrons carry a negative charge.
 
 The number of protons in an atom's nucleus is called the atomic number and determines which element the atom belongs to. In a neutral atom, the number of electrons equals the number of protons.
 
-Electrons carry a negative charge and occupy regions of space called orbitals, arranged in energy levels called electron shells. Isotopes are atoms of the same element with the same atomic number but different numbers of neutrons, giving them different mass numbers.`,
+Electrons occupy regions of space called orbitals, arranged in energy levels called electron shells. The chemical properties of an element are determined by the number and arrangement of its electrons, not by its neutrons.
+
+Isotopes are atoms of the same element with the same atomic number but different numbers of neutrons, giving them different mass numbers.`,
   },
   medicine: {
     label: 'Medicine · The Heart',
     sourceText: `The heart is a muscular organ that pumps blood through the body via the circulatory system. It is divided into four chambers: the right atrium, the right ventricle, the left atrium, and the left ventricle.
 
-Oxygen-depleted blood enters the right atrium, passes into the right ventricle, and is pumped to the lungs. Oxygen-rich blood returns to the left atrium, passes into the left ventricle, and is pumped out through the aorta to the rest of the body.
+Oxygen-depleted blood enters the right atrium, passes into the right ventricle, and is pumped to the lungs. Oxygen-rich blood returns to the left atrium, passes into the left ventricle, and is pumped out through the aorta to the rest of the body. Because the left ventricle must drive blood through the entire body, its muscular wall is significantly thicker than that of the right ventricle.
 
-The contraction phase of the cardiac cycle is called systole; the relaxation phase is called diastole. Four valves — the tricuspid, pulmonary, mitral, and aortic — prevent backflow of blood between chambers and vessels. The heart's rhythm is initiated by the sinoatrial node, located in the right atrium, which functions as the heart's natural pacemaker.`,
+The contraction phase of the cardiac cycle is called systole; the relaxation phase is called diastole. The heart's rhythm is initiated by the sinoatrial node, located in the right atrium, which functions as the heart's natural pacemaker.`,
   },
+}
+
+const DEMO_CARDS: Record<Subject, DemoCard[]> = {
+  history: [
+    {
+      id: 'h1',
+      text: "The date on which Germany's invasion of Poland began World War II was {{c1::1 September 1939}}.",
+      extra: "Britain and France had guaranteed Polish independence, so the invasion obligated them to declare war two days later.",
+      highlightPhrase: "September 3, 1939",
+      approved: true,
+      logg: "CORRECTED: Corrected: the source material incorrectly stated that Germany invaded Poland on 3 September 1939",
+    },
+    {
+      id: 'h2',
+      text: "The 1942–1943 battle on the Eastern Front in which German forces suffered a catastrophic defeat, marking a decisive turning point of the war, was the {{c1::Battle of Stalingrad}}.",
+      extra: "The German defeat halted their advance into the Soviet Union and shifted the strategic initiative permanently to the Red Army.",
+      highlightPhrase: "Battle of Stalingrad",
+      approved: true,
+    },
+    {
+      id: 'h3',
+      text: "The date on which Britain and France declared war on Germany in response to the invasion of Poland was {{c1::3 September 1939}}.",
+      extra: "Their declarations turned a regional invasion into a continent-wide war, even though neither could aid Poland militarily in time.",
+      highlightPhrase: "Britain and France to declare war",
+      approved: true,
+      logg: "EXTERNAL: External addition",
+    },
+    {
+      id: 'h4',
+      text: "The name given to 8 May 1945, the day of Germany's unconditional surrender ending the war in Europe, is {{c1::V-E Day}}.",
+      extra: 'V-E stands for "Victory in Europe," distinguishing it from V-J Day, which marked the victory over Japan.',
+      highlightPhrase: "V-E Day",
+      approved: true,
+    },
+  ],
+  biology: [
+    {
+      id: 'b1',
+      text: "The enzyme that copies a DNA segment into messenger RNA during transcription is called {{c1::RNA polymerase}}.",
+      extra: "Without RNA polymerase no mRNA copy could be produced, so no genetic message would ever reach the ribosome for translation.",
+      highlightPhrase: "RNA polymerase",
+      approved: true,
+    },
+    {
+      id: 'b2',
+      text: "The unit of three nucleotides in mRNA that specifies a single amino acid is called a {{c1::codon}}.",
+      extra: "Codons form the dictionary of the genetic code, mapping each nucleotide triplet to one amino acid in the growing protein.",
+      highlightPhrase: "codons",
+      approved: true,
+    },
+    {
+      id: 'b3',
+      text: "The RNA molecule that delivers the correct amino acids to the ribosome during translation is called {{c1::transfer RNA (tRNA)}}.",
+      extra: "Each tRNA pairs a specific codon with its matching amino acid, physically linking the genetic code to the assembling protein.",
+      highlightPhrase: "Transfer RNA (tRNA)",
+      approved: true,
+    },
+    {
+      id: 'b4',
+      text: "Why must transcription occur before translation during protein synthesis?",
+      extra: "Transcription produces the mRNA copy of the DNA, and the ribosome reads that mRNA as its template during translation; the message must exist before it can be decoded, so no polypeptide can be built until transcription has supplied the mRNA.",
+      highlightPhrase: "transcription and translation",
+      approved: true,
+      card_type: 'qa',
+    },
+  ],
+  chemistry: [
+    {
+      id: 'c1',
+      text: "The number of protons in an atom's nucleus is called the {{c1::atomic number}}.",
+      extra: "The atomic number serves as the identity tag of an element and sets its position in the periodic table.",
+      highlightPhrase: "atomic number",
+      approved: true,
+    },
+    {
+      id: 'c2',
+      text: "Atoms of the same element that share the same atomic number but have different numbers of neutrons are called {{c1::isotopes}}.",
+      extra: "Isotopes explain why an element's atomic mass on the periodic table is often not a whole number.",
+      highlightPhrase: "Isotopes",
+      approved: true,
+    },
+    {
+      id: 'c3',
+      text: "The atomic value equal to the total number of protons and neutrons in the nucleus is called the {{c1::mass number}}.",
+      extra: "Mass number, unlike atomic number, counts neutrons and therefore differs between isotopes of a single element.",
+      highlightPhrase: "different mass numbers",
+      approved: true,
+      logg: "EXTERNAL: External addition",
+    },
+    {
+      id: 'c4',
+      text: "Why do different isotopes of the same element have nearly identical chemical properties?",
+      extra: "Because chemical properties are determined by the number and arrangement of electrons, and isotopes of an element differ only in neutron number while sharing the same number of electrons.",
+      highlightPhrase: "chemical properties of an element",
+      approved: true,
+      card_type: 'qa',
+      logg: "EXTERNAL: External addition",
+    },
+  ],
+  medicine: [
+    {
+      id: 'm1',
+      text: "The heart chamber that pumps oxygen-rich blood out through the aorta to the body is {{c1::the left ventricle}}.",
+      extra: "This begins the systemic circulation, delivering oxygenated blood to every tissue in the body.",
+      highlightPhrase: "pumped out through the aorta",
+      approved: true,
+    },
+    {
+      id: 'm2',
+      text: "Why is the muscular wall of the left ventricle significantly thicker than that of the right ventricle?",
+      extra: "Because the left ventricle must drive blood through the entire body, whereas the right ventricle only pumps blood the short distance to the lungs.",
+      highlightPhrase: "muscular wall is significantly thicker",
+      approved: true,
+      card_type: 'qa',
+    },
+    {
+      id: 'm3',
+      text: "The phase of the cardiac cycle in which the heart muscle contracts is called {{c1::systole}}.",
+      extra: "During systole, ventricular pressure rises sharply to eject blood into the arteries.",
+      highlightPhrase: "systole",
+      approved: true,
+    },
+    {
+      id: 'm4',
+      text: "The structure that initiates the heart's rhythm and serves as its natural pacemaker is called {{c1::the sinoatrial node}}.",
+      extra: "By generating spontaneous electrical impulses, it sets the rate at which the whole heart contracts.",
+      highlightPhrase: "sinoatrial node",
+      approved: true,
+    },
+  ],
 }
 
 const SUBJECTS: { key: Subject; emoji: string; title: string; sub: string }[] = [
@@ -112,15 +235,11 @@ function highlightSource(source: string, phrases: string[]): string {
   return result
 }
 
-// Maps API snake_case response to camelCase DemoCard
-function mapApiCard(raw: ApiDemoCard): DemoCard {
-  return {
-    id: raw.id,
-    text: raw.text,
-    extra: raw.extra,
-    highlightPhrase: raw.highlight_phrase,
-    approved: raw.approved,
-  }
+function loggDisplay(logg?: string): string | null {
+  if (!logg) return null
+  if (logg.startsWith('CORRECTED:')) return 'ⓘ ' + logg.replace(/^CORRECTED: /, '')
+  if (logg.startsWith('EXTERNAL:')) return '+ ' + logg.replace(/^EXTERNAL: /, '')
+  return null
 }
 
 // ---------------------------------------------------------------------------
@@ -137,8 +256,6 @@ export default function DemoExperience({ onStartedChange, endSlot }: DemoExperie
   const [visibleCards, setVisibleCards]         = useState<DemoCard[]>([])
   const [highlightedPhrases, setHighlightedPhrases] = useState<string[]>([])
   const [fetchedCards, setFetchedCards]         = useState<DemoCard[]>([])
-  const [isLoading, setIsLoading]               = useState(false)
-  const [fetchError, setFetchError]             = useState<string | null>(null)
   const timerRefs = useRef<ReturnType<typeof setTimeout>[]>([])
 
   // Cleanup all pending timeouts on unmount
@@ -155,33 +272,17 @@ export default function DemoExperience({ onStartedChange, endSlot }: DemoExperie
     onStartedChange?.(demoState !== 'pick')
   }, [demoState, onStartedChange])
 
-  async function startDemo(s: Subject) {
+  function startDemo(s: Subject) {
     timerRefs.current.forEach(t => clearTimeout(t))
     timerRefs.current = []
-
-    // Cookie is no longer set here — /welcome sets dimindo_demo_seen on load,
-    // and /demo no longer marks first-time visitors at all.
     setSubject(s)
     setVisibleCards([])
     setHighlightedPhrases([])
     setFetchedCards([])
-    setFetchError(null)
-    setIsLoading(true)
-    setDemoState('animating')   // enter two-column layout immediately; source text is static
-
-    try {
-      const res = await fetch(`${API}/api/demo/cards?subject=${s}`)
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const raw: ApiDemoCard[] = await res.json()
-      const cards = raw.map(mapApiCard)
-      setFetchedCards(cards)
-      setIsLoading(false)
-      animateCards(cards)
-    } catch {
-      setIsLoading(false)
-      setFetchError('Failed to load demo cards. Please try again.')
-      setDemoState('pick')
-    }
+    setDemoState('animating')
+    const cards = DEMO_CARDS[s]
+    setFetchedCards(cards)
+    animateCards(cards)
   }
 
   function animateCards(cards: DemoCard[]) {
@@ -219,7 +320,6 @@ export default function DemoExperience({ onStartedChange, endSlot }: DemoExperie
     setVisibleCards([])
     setHighlightedPhrases([])
     setFetchedCards([])
-    setFetchError(null)
   }
 
   const meta = subject ? SUBJECT_META[subject] : null
@@ -337,20 +437,6 @@ export default function DemoExperience({ onStartedChange, endSlot }: DemoExperie
           font-size: 0.78rem;
           color: var(--muted);
           font-family: 'DM Mono', monospace;
-        }
-
-        /* Fetch error in pick screen */
-        .demo-fetch-error {
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          font-size: 0.82rem;
-          color: #b04a2a;
-          background: #fdf0ec;
-          border: 1px solid #f5c8bb;
-          border-radius: 4px;
-          padding: 10px 14px;
-          margin-bottom: 24px;
         }
 
         /* ---- Two-column stage (animating + review) ---- */
@@ -514,6 +600,27 @@ export default function DemoExperience({ onStartedChange, endSlot }: DemoExperie
           border-top: 1px solid var(--cream);
           padding-top: 8px;
           margin-top: 6px;
+        }
+
+        .demo-card-logg {
+          font-family: 'DM Mono', monospace;
+          font-size: 0.68rem;
+          line-height: 1.45;
+          color: var(--gold);
+          border-top: 1px solid var(--cream);
+          padding-top: 8px;
+          margin-top: 8px;
+        }
+
+        .demo-card-qa-prefix {
+          font-family: 'DM Mono', monospace;
+          font-size: 0.72rem;
+          letter-spacing: 0.04em;
+          color: var(--muted);
+        }
+
+        .demo-card-qa-answer {
+          margin-top: 0;
         }
 
         /* Skip during animation */
@@ -707,12 +814,6 @@ export default function DemoExperience({ onStartedChange, endSlot }: DemoExperie
               study cards in real time — no account required.
             </p>
 
-            {fetchError && (
-              <div className="demo-fetch-error">
-                <span>⚠</span> {fetchError}
-              </div>
-            )}
-
             <div className="demo-grid">
               {SUBJECTS.map(s => (
                 <button
@@ -761,32 +862,44 @@ export default function DemoExperience({ onStartedChange, endSlot }: DemoExperie
 
                   <div className="demo-scanning">
                     <span className="demo-scan-dot" />
-                    {isLoading
-                      ? 'Loading cards…'
-                      : visibleCards.length < fetchedCards.length
-                        ? 'Identifying key concept…'
-                        : 'Finalising…'}
+                    {visibleCards.length < fetchedCards.length
+                      ? 'Identifying key concept…'
+                      : 'Finalising…'}
                   </div>
 
-                  {!isLoading && visibleCards.map(card => (
+                  {visibleCards.map(card => (
                     <div key={card.id} className="demo-card-wrap">
                       <div className="demo-card">
-                        <p
-                          className="demo-card-text"
-                          dangerouslySetInnerHTML={{ __html: renderCloze(card.text) }}
-                        />
-                        {card.extra && (
-                          <p className="demo-card-extra">{card.extra}</p>
+                        {card.card_type === 'qa' ? (
+                          <>
+                            <p className="demo-card-text">
+                              <span className="demo-card-qa-prefix">Q ·</span> {card.text}
+                            </p>
+                            <p className="demo-card-extra demo-card-qa-answer">
+                              <span className="demo-card-qa-prefix">A ·</span> {card.extra}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p
+                              className="demo-card-text"
+                              dangerouslySetInnerHTML={{ __html: renderCloze(card.text) }}
+                            />
+                            {card.extra && (
+                              <p className="demo-card-extra">{card.extra}</p>
+                            )}
+                          </>
+                        )}
+                        {loggDisplay(card.logg) && (
+                          <p className="demo-card-logg">{loggDisplay(card.logg)}</p>
                         )}
                       </div>
                     </div>
                   ))}
 
-                  {!isLoading && (
-                    <button className="demo-skip-anim" onClick={skipToReview}>
-                      Skip animation →
-                    </button>
-                  )}
+                  <button className="demo-skip-anim" onClick={skipToReview}>
+                    Skip animation →
+                  </button>
                 </>
               )}
 
@@ -807,12 +920,28 @@ export default function DemoExperience({ onStartedChange, endSlot }: DemoExperie
                   <div className="demo-cards-list">
                     {fetchedCards.map(card => (
                       <div key={card.id} className="demo-review-card">
-                        <p
-                          className="demo-card-text"
-                          dangerouslySetInnerHTML={{ __html: renderCloze(card.text) }}
-                        />
-                        {card.extra && (
-                          <p className="demo-card-extra">{card.extra}</p>
+                        {card.card_type === 'qa' ? (
+                          <>
+                            <p className="demo-card-text">
+                              <span className="demo-card-qa-prefix">Q ·</span> {card.text}
+                            </p>
+                            <p className="demo-card-extra demo-card-qa-answer">
+                              <span className="demo-card-qa-prefix">A ·</span> {card.extra}
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p
+                              className="demo-card-text"
+                              dangerouslySetInnerHTML={{ __html: renderCloze(card.text) }}
+                            />
+                            {card.extra && (
+                              <p className="demo-card-extra">{card.extra}</p>
+                            )}
+                          </>
+                        )}
+                        {loggDisplay(card.logg) && (
+                          <p className="demo-card-logg">{loggDisplay(card.logg)}</p>
                         )}
                       </div>
                     ))}
