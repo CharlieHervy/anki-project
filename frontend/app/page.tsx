@@ -9,6 +9,10 @@ import styles from './page.module.css'
 
 const API = 'https://anki-project-production.up.railway.app'
 
+// Kept in sync with the file input's accept attribute and the backend's
+// /api/upload dispatch. Images and scanned PDFs are admin-gated server-side.
+const ACCEPTED_EXTENSIONS = ['.txt', '.pdf', '.jpg', '.jpeg', '.png']
+
 type Card = {
   id: string
   text: string
@@ -158,6 +162,9 @@ export default function Home() {
   const [isReviewing, setIsReviewing] = useState(false)
   const [error, setError] = useState('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const dragDepth = useRef(0)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editText, setEditText] = useState('')
   const [editExtra, setEditExtra] = useState('')
@@ -274,18 +281,84 @@ export default function Home() {
   }, [user, isLoaded])
 
   // --- File Upload ---
+  // uploadFile is the single upload path — the file picker and the drop zone
+  // both go through it, so they share the endpoint and the error handling.
+  // The backend answers a non-admin scanned PDF or image with a 403 whose
+  // detail we surface verbatim rather than failing silently.
+  async function uploadFile(file: File) {
+    setError('')
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await fetch(`${API}/api/upload`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: formData,
+      })
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok) {
+        setError(data?.detail || "We couldn't read that file. Try another one.")
+        return
+      }
+      if (data?.text) {
+        setSourceText(data.text)
+      } else {
+        setError("That file didn't contain any readable text.")
+      }
+    } catch {
+      setError('Upload failed — check your connection and try again.')
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
-    const formData = new FormData()
-    formData.append('file', file)
-    const res = await fetch(`${API}/api/upload`, {
-      method: 'POST',
-      headers: authHeaders,
-      body: formData,
-    })
-    const data = await res.json()
-    if (data.text) setSourceText(data.text)
+    await uploadFile(file)
+    e.target.value = '' // låt samma fil kunna väljas igen
+  }
+
+  // --- Drag and drop ---
+  // dragDepth counts enter/leave pairs so that dragging across child elements
+  // inside the zone doesn't flicker the highlight off.
+  function handleDragEnter(e: React.DragEvent) {
+    if (state !== 'upload') return
+    e.preventDefault()
+    dragDepth.current += 1
+    setIsDragging(true)
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    if (state !== 'upload') return
+    e.preventDefault() // utan detta avfyras drop-eventet aldrig
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault()
+    dragDepth.current = Math.max(0, dragDepth.current - 1)
+    if (dragDepth.current === 0) setIsDragging(false)
+  }
+
+  async function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    dragDepth.current = 0
+    setIsDragging(false)
+    if (state !== 'upload') return
+
+    const file = e.dataTransfer.files?.[0]
+    if (!file) return
+
+    const name = file.name.toLowerCase()
+    if (!ACCEPTED_EXTENSIONS.some(ext => name.endsWith(ext))) {
+      setError(
+        `${file.name} isn't a supported file type. Use .txt, .pdf, .jpg or .png.`
+      )
+      return
+    }
+    await uploadFile(file)
   }
 
   // --- Card Generation with SSE Streaming ---
@@ -830,14 +903,31 @@ export default function Home() {
               </div>
             )}
 
-            <textarea
-              className={styles.textarea}
-              placeholder="Paste your source material here…"
-              value={sourceText}
-              onChange={e => setSourceText(e.target.value)}
-              disabled={state === 'generating'}
-              autoFocus
-            />
+            <div
+              className={[styles.dropzone, isDragging ? styles.dropzoneActive : '']
+                .filter(Boolean)
+                .join(' ')}
+              onDragEnter={handleDragEnter}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
+              <textarea
+                className={styles.textarea}
+                placeholder="Paste your source material here — or drop a .txt, .pdf, or image file…"
+                value={sourceText}
+                onChange={e => setSourceText(e.target.value)}
+                disabled={state === 'generating' || isUploading}
+                autoFocus
+              />
+              {isDragging && (
+                <div className={styles.dropOverlay}>Drop to upload</div>
+              )}
+            </div>
+
+            {isUploading && (
+              <p className={styles.uploadStatus}>Reading file…</p>
+            )}
 
             {/* Counter stack — generation cost (Pro, top) · count/limit · QR
                 suffix (bottom). While quota is still loading we show a neutral
@@ -888,15 +978,15 @@ export default function Home() {
             <div className={styles.buttonRow}>
               <button
                 onClick={() => fileInputRef.current?.click()}
-                disabled={state === 'generating'}
+                disabled={state === 'generating' || isUploading}
                 className={styles.btnSecondary}
               >
-                Upload file (.txt / .pdf)
+                {isUploading ? 'Reading file…' : 'Upload file (.txt / .pdf / image)'}
               </button>
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".txt,.pdf"
+                accept=".txt,.pdf,.jpg,.jpeg,.png"
                 className={styles.fileInput}
                 onChange={handleFileUpload}
               />

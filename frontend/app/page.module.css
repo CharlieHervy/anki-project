@@ -148,6 +148,44 @@
 .textarea:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ─────────────────────────────────────────────
+   Dropzone — wraps the textarea. Drag-over recolours the textarea's own
+   border to gold rather than adding a second frame, so the drop target
+   reads as the field the file will land in.
+───────────────────────────────────────────── */
+.dropzone { position: relative; }
+
+.dropzoneActive .textarea {
+  border-color: var(--gold);
+  background: var(--paper);
+}
+
+.dropOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--gold);
+  border-radius: 4px;
+  background: rgba(237, 233, 225, 0.92); /* --cream, semi-opaque */
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
+  pointer-events: none; /* släpp igenom drop-eventet till wrappern */
+}
+
+/* Upload progress — vision extraction on a scanned file takes seconds. */
+.uploadStatus {
+  margin-top: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+/* ─────────────────────────────────────────────
    Counter stack (below textarea)
    Right-aligned column: generation cost (Pro, top) → count/limit →
    Quick Refill suffix (bottom). The stack owns the top gap so its lines

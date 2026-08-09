@@ -669,43 +669,286 @@ def get_user_id(x_user_id: str = Header(None)):
         return "anonymous_user"
     return x_user_id
 
+
+# ── Multimodal extraktion (skannade PDF:er och foton av anteckningar) ────────
+#
+# Kärnlogiken nedan är plan-agnostisk: detektion, rendering och transkribering
+# vet ingenting om planer. Hela behörighetsskillnaden ligger i
+# require_multimodal_access(), som anropas på ett ställe per kodväg. Tas den
+# raden bort blir funktionen publik utan att något annat behöver skrivas om.
+
+VISION_MODEL = "claude-sonnet-5"
+
+# 200 DPI ger ~2340 px långsida för A4/Letter — under Claudes tak på 2576 px,
+# och tillräckligt skarpt för brödtext i en skannad sida.
+VISION_RENDER_DPI = 200
+
+# Flera sidor per anrop ger modellen kontext över sidbrytningar; taket håller
+# enskilda requests små.
+VISION_PAGES_PER_CALL = 4
+
+# Kostnadsräcke, inte kvotlogik: en skannad sida är ~1 bild ≈ tusentals
+# input-tokens. Höj medvetet, inte av misstag.
+MAX_VISION_PAGES = 30
+
+# En sida med färre tecken än så här efter trim räknas som "utan textlager".
+SCANNED_MIN_CHARS_PER_PAGE = 10
+# Andel sådana sidor som gör att hela dokumentet klassas som skannat.
+SCANNED_PAGE_RATIO = 0.5
+
+IMAGE_MEDIA_TYPES = {
+    ".jpg":  "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png":  "image/png",
+}
+
+MULTIMODAL_GATED_MESSAGE = (
+    "Scanned documents aren't supported yet — this feature is in testing"
+)
+
+VISION_SYSTEM_PROMPT = (
+    "You transcribe scanned pages and photographed notes into plain text that "
+    "will be used as study material.\n\n"
+    "- Transcribe every word you can read, verbatim and in reading order.\n"
+    "- Do not translate, summarise, correct, or rephrase anything.\n"
+    "- Keep headings, paragraph breaks, and list structure. Render tables as "
+    "plain text rows.\n"
+    "- For a diagram, chart, or figure that carries information the text does "
+    "not, add one bracketed line describing it, e.g. "
+    "[Figure: flowchart of the citric acid cycle].\n"
+    "- If part of a page is illegible, write [illegible] rather than guessing.\n"
+    "- Output the transcription only. No preamble, no commentary, no summary "
+    "of what you did."
+)
+
+
+def lookup_plan(user_id: str) -> str:
+    """
+    Läser plan-fältet ur user_quotas.
+
+    Medvetet INTE get_quota_status-RPC:n som /api/generate använder: den tar
+    p_timezone och räknar om resetfönster. Det är en sidoeffekt en
+    uppladdning inte ska trigga. Här behövs bara plan.
+
+    Fail-closed: okänd användare eller fel mot Supabase ger 'free'.
+    """
+    if not user_id or user_id == "anonymous_user":
+        return "free"
+    try:
+        result = (
+            supabase.table("user_quotas")
+            .select("plan")
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        )
+    except Exception:
+        logging.exception("Plan lookup failed for upload gate")
+        return "free"
+    rows = result.data or []
+    if not rows:
+        return "free"
+    return rows[0].get("plan") or "free"
+
+
+def require_multimodal_access(user_id: str) -> None:
+    """Tunn behörighetskontroll — enda stället där multimodal-vägen är plan-beroende."""
+    if lookup_plan(user_id) != "admin":
+        raise HTTPException(status_code=403, detail=MULTIMODAL_GATED_MESSAGE)
+
+
+def render_pdf_pages(doc, page_count: int) -> list[tuple[str, bytes]]:
+    """Renderar varje sida till PNG. Returnerar (media_type, bytes) per sida."""
+    pages = []
+    for n in range(page_count):
+        pix = doc[n].get_pixmap(dpi=VISION_RENDER_DPI)
+        pages.append(("image/png", pix.tobytes("png")))
+    return pages
+
+
+def transcribe_images(images: list[tuple[str, bytes]], first_page: int = 1) -> str:
+    """
+    Skickar bilderna till Claude som image-block i messages och returnerar
+    den sammanslagna transkriberingen.
+
+    Systemprompten ligger under cachningens minimigräns (512 tokens), så den
+    får inget cache_control — en markör där hade varit en no-op.
+    """
+    import base64
+    from generator import client
+
+    chunks: list[str] = []
+
+    for start in range(0, len(images), VISION_PAGES_PER_CALL):
+        batch = images[start:start + VISION_PAGES_PER_CALL]
+        content: list[dict] = []
+
+        for offset, (media_type, raw) in enumerate(batch):
+            content.append({
+                "type": "text",
+                "text": f"--- Page {first_page + start + offset} ---"
+            })
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": base64.standard_b64encode(raw).decode("ascii"),
+                },
+            })
+
+        content.append({
+            "type": "text",
+            "text": "Transcribe every page above, in order."
+        })
+
+        try:
+            response = client.beta.messages.create(
+                model=VISION_MODEL,
+                max_tokens=16000,
+                thinking={"type": "adaptive"},
+                output_config={"effort": "low"},
+                system=VISION_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": content}],
+            )
+        except Exception as e:
+            logging.exception("Vision extraction failed")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Text extraction failed: {str(e)}"
+            )
+
+        if getattr(response, "stop_reason", None) == "refusal":
+            raise HTTPException(
+                status_code=422,
+                detail="The model declined to transcribe this document."
+            )
+
+        usage = response.usage
+        logging.info(
+            f"[VISION] model={VISION_MODEL} pages={len(batch)} "
+            f"input={usage.input_tokens} output={usage.output_tokens}"
+        )
+
+        text = "".join(
+            block.text for block in response.content
+            if getattr(block, "type", "") == "text"
+        )
+        if text.strip():
+            chunks.append(text.strip())
+
+    return "\n\n".join(chunks)
+
+
 @app.post("/api/upload")
 async def upload_file(
     file: UploadFile = File(...),
     user_id: str = Depends(get_user_id)
 ):
-    """Tar emot uppladdad fil och returnerar textinnehåll."""
+    """
+    Tar emot uppladdad fil och returnerar textinnehåll.
+
+    .txt och digitalt skapade PDF:er går textvägen som tidigare, för alla
+    planer. Skannade PDF:er och bilder går multimodal-vägen, som är gatead.
+    """
+    import asyncio
+
     content_type = file.content_type or ""
-    filename = file.filename or ""
+    filename = (file.filename or "").lower()
+    ext = os.path.splitext(filename)[1]
 
-    if filename.endswith(".txt") or "text" in content_type:
+    # ── Bilder: alltid multimodalt, ingen textdetektion behövs ───────────────
+    if ext in IMAGE_MEDIA_TYPES or content_type.startswith("image/"):
+        media_type = IMAGE_MEDIA_TYPES.get(ext, content_type)
+        if media_type not in set(IMAGE_MEDIA_TYPES.values()):
+            raise HTTPException(
+                status_code=400,
+                detail="Image format not supported. Use .jpg or .png"
+            )
+
+        require_multimodal_access(user_id)
+
         content = await file.read()
-        return {"text": content.decode("utf-8", errors="ignore")}
+        text = await asyncio.to_thread(transcribe_images, [(media_type, content)])
+        if not text.strip():
+            raise HTTPException(
+                status_code=422,
+                detail="No readable text found in this image."
+            )
+        return {"text": text, "extraction": "multimodal"}
 
-    elif filename.endswith(".pdf") or "pdf" in content_type:
+    if ext == ".txt" or "text" in content_type:
+        content = await file.read()
+        return {"text": content.decode("utf-8", errors="ignore"), "extraction": "text"}
+
+    if ext == ".pdf" or "pdf" in content_type:
         try:
             import pymupdf
-            content = await file.read()
-            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                tmp.write(content)
-                tmp_path = tmp.name
-            doc = pymupdf.open(tmp_path)
-            text = ""
-            for page in doc:
-                text += page.get_text()
-            doc.close()
-            os.unlink(tmp_path)
-            return {"text": text}
         except ImportError:
             raise HTTPException(
                 status_code=400,
                 detail="PDF-stöd kräver pymupdf. Kör: pip install pymupdf"
             )
-    else:
-        raise HTTPException(
-            status_code=400,
-            detail="Filformat stöds inte. Använd .txt eller .pdf"
-        )
+
+        content = await file.read()
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        try:
+            doc = pymupdf.open(tmp_path)
+            try:
+                page_texts = [page.get_text() for page in doc]
+
+                if not page_texts:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Could not read any pages from this PDF."
+                    )
+
+                # Detektion läser bara längden på text vi redan extraherat —
+                # ingen extra bearbetning per sida för digitala PDF:er.
+                sparse = sum(
+                    1 for t in page_texts
+                    if len(t.strip()) < SCANNED_MIN_CHARS_PER_PAGE
+                )
+                is_scanned = sparse > len(page_texts) * SCANNED_PAGE_RATIO
+
+                if not is_scanned:
+                    return {"text": "".join(page_texts), "extraction": "pymupdf"}
+
+                require_multimodal_access(user_id)
+
+                if len(page_texts) > MAX_VISION_PAGES:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=(
+                            f"Scanned PDFs are limited to {MAX_VISION_PAGES} pages "
+                            f"per upload — this file has {len(page_texts)}. "
+                            "Split it and upload the parts separately."
+                        )
+                    )
+
+                images = await asyncio.to_thread(
+                    render_pdf_pages, doc, len(page_texts)
+                )
+            finally:
+                doc.close()
+        finally:
+            os.unlink(tmp_path)
+
+        text = await asyncio.to_thread(transcribe_images, images)
+        if not text.strip():
+            raise HTTPException(
+                status_code=422,
+                detail="No readable text found in this document."
+            )
+        return {"text": text, "extraction": "multimodal"}
+
+    raise HTTPException(
+        status_code=400,
+        detail="Filformat stöds inte. Använd .txt, .pdf, .jpg eller .png"
+    )
 
 
 # ── /api/cards/{session_id} ───────────────────────────────────────────────────
