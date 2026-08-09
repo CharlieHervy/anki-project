@@ -1,6 +1,7 @@
 import os
 import uuid
 import json
+import asyncio
 import logging
 import tempfile
 import stripe
@@ -17,9 +18,10 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from sqlalchemy.orm import Session
-from generator import generate_cards_stream, parse_tsv, review_cards
+from generator import generate_cards_stream, parse_tsv, review_cards, build_image_blocks
 from exporter import export_to_apkg
 from database import get_db, SessionModel, CardModel, DemoCard
+import storage
 
 app = FastAPI()
 
@@ -123,12 +125,34 @@ def sse_error(message: str, **kwargs) -> StreamingResponse:
 
 @app.post("/api/generate")
 async def generate(
-    source_material: str = Form(...),
+    source_material: str = Form(default=""),
+    upload_id: str = Form(default=""),
     language: str = Form(default="English"),
     timezone: str = Form(default="UTC"),
     x_user_id: str = Header(...),          # Kräver autentisering — ingen anonym fallback
     db: Session = Depends(get_db)
 ):
+    # ── Upplösningspunkten. Efter denna vet resten av flödet bara .text/.images ──
+    # Gaten körs om här och inte bara i /api/upload: upload_id är en referens
+    # till serverlagrad data, så den måste auktoriseras vid varje användning.
+    #
+    # Både gaten och upplösningen måste bli SSE-fel, inte HTTP-fel: klienten
+    # läser svaret som en event-stream, så ett rått 403 skulle tolkas som en
+    # tom ström och misslyckas tyst.
+    try:
+        if upload_id:
+            require_multimodal_access(x_user_id)
+        src = await asyncio.to_thread(
+            resolve_source,
+            source_material, upload_id, "", x_user_id
+        )
+    except HTTPException as e:
+        return sse_error(str(e.detail))
+
+    if not src.text.strip():
+        return sse_error("No source material provided.")
+
+    source_material = src.text
     word_count = count_words(source_material)
 
     # 1. Hämta användarens plan + pooler för inputvalidering
@@ -224,7 +248,20 @@ async def generate(
     db.refresh(db_session)
     session_id = str(db_session.id)
 
-    import asyncio
+    # 4b. Bildläge: flytta sidorna från staging till den permanenta
+    #     sessions-sökvägen. Måste ske efter att session_id finns, och innan
+    #     genereringen startar — /api/explain läser dem därifrån senare.
+    if src.is_images:
+        try:
+            moved = await asyncio.to_thread(
+                storage.promote_staging_to_session, upload_id, x_user_id, session_id
+            )
+            logging.info(f"[UPLOAD] promoted {moved} page(s) to session {session_id}")
+        except Exception:
+            # Genereringen kan fortsätta på de redan inlästa bilderna i minnet;
+            # det som går förlorat är chattens källförankring i granskningsvyn.
+            logging.exception("Promoting staged pages to session storage failed")
+
     import queue
     import threading
 
@@ -234,7 +271,7 @@ async def generate(
 
     def run_generator():
         try:
-            for chunk in generate_cards_stream(source_material, language):
+            for chunk in generate_cards_stream(source_material, language, src.images):
                 chunk_queue.put(chunk)
             chunk_queue.put(DONE_SENTINEL)
         except Exception as e:
@@ -316,7 +353,9 @@ async def generate(
 
             yield f"data: {json.dumps({'type': 'reviewing'})}\n\n"
 
-            indices_to_remove = await asyncio.to_thread(review_cards, source_material, cards)
+            indices_to_remove = await asyncio.to_thread(
+                review_cards, source_material, cards, src.images
+            )
             if indices_to_remove:
                 remove_set = set(indices_to_remove)
                 cards = [card for i, card in enumerate(cards) if (i + 1) not in remove_set]
@@ -572,6 +611,9 @@ class ExplainRequest(BaseModel):
     source_material: str
     cards: list[ExplainCardItem]
     messages: list[ExplainMessage]
+    # Bildläge: nyckeln till serverlagrade sidbilder. Ägarkontrolleras innan
+    # den används — annars kunde ett gissat id läsa någon annans sidor.
+    session_id: str = ""
 
 
 # ── /api/explain ──────────────────────────────────────────────────────────────
@@ -579,14 +621,32 @@ class ExplainRequest(BaseModel):
 @app.post("/api/explain")
 async def explain(
     body: ExplainRequest,
-    x_user_id: str = Header(...)
+    x_user_id: str = Header(...),
+    db: Session = Depends(get_db)
 ):
     """
     Session-scoped AI-chatt i granskningsvyn.
     Inget kvotavdrag. Ingen streaming. Svarar på studentens språk.
+
+    I bildläge får chatten samma sidor som generatorn och granskaren såg,
+    och routas till Sonnet 5 — Haiku 4.5 ligger i den lägre visionklassen
+    (1568 px) och skulle inte läsa tät matematisk notation tillförlitligt.
+    Textläget är oförändrat: Haiku 4.5, samma max_tokens, ingen cache_control.
     """
-    import asyncio
     from generator import client
+
+    # ── Ägarkontroll innan någon serverlagrad data rörs ──────────────────────
+    source_images = None
+    if body.session_id:
+        owned = db.query(SessionModel).filter(
+            SessionModel.id == body.session_id,
+            SessionModel.user_id == x_user_id
+        ).first()
+        if owned:
+            src = await asyncio.to_thread(
+                resolve_source, body.source_material, "", body.session_id, x_user_id
+            )
+            source_images = src.images
 
     cards_text = "\n\n".join(
         f"Card {i + 1}:\nFront: {c.text}\nBack: {c.extra}"
@@ -644,22 +704,63 @@ async def explain(
 
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
 
-    try:
-        response = await asyncio.to_thread(
-            lambda: client.messages.create(
+    if source_images and messages:
+        # Historiken skickas hel vid varje anrop, så bilderna måste med varje
+        # gång — annars tappar chatten källförankringen efter första svaret.
+        # De läggs i FÖRSTA meddelandet och cachas: prefixet (system + sidor +
+        # första frågan) är stabilt mellan turer, så tur 2 och framåt läser
+        # cachen i stället för att betala för ~4 800 tokens per sida på nytt.
+        # 1h TTL — en granskningssession spänner lätt längre än cachens
+        # 5-minutersdefault.
+        image_blocks = build_image_blocks(source_images)
+        image_blocks[-1]["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
+        messages[0] = {
+            "role": "user",
+            "content": image_blocks + [{"type": "text", "text": messages[0]["content"]}],
+        }
+
+        # output_config kräver beta-namespacet i den här SDK-versionen.
+        def call():
+            return client.beta.messages.create(
+                model="claude-sonnet-5",
+                # Sonnet 5 kör adaptive thinking som default; sätts explicit så
+                # att djupet är ett val. Thinking delar max_tokens med
+                # svarstexten — 2048 skulle kunna ätas upp av thinking och ge
+                # tomt svar.
+                thinking={"type": "adaptive"},
+                output_config={"effort": "medium"},
+                max_tokens=8000,
+                system=system_prompt,
+                messages=messages,
+                betas=["prompt-caching-2024-07-31"],
+            )
+    else:
+        # Textläget: oförändrat mot tidigare — samma namespace, modell och tak.
+        def call():
+            return client.messages.create(
                 model="claude-haiku-4-5",
                 max_tokens=2048,
                 system=system_prompt,
-                messages=messages
+                messages=messages,
             )
-        )
+
+    try:
+        response = await asyncio.to_thread(call)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI error: {str(e)}")
 
     if not response.content:
         raise HTTPException(status_code=500, detail="Empty response from AI")
 
-    return {"response": response.content[0].text}
+    # I bildläge är content[0] ett thinking-block, inte texten.
+    answer = "".join(
+        block.text for block in response.content
+        if getattr(block, "type", "") == "text"
+    )
+    if not answer.strip():
+        raise HTTPException(status_code=500, detail="Empty response from AI")
+
+    return {"response": answer}
 
 
 # ── /api/upload ───────────────────────────────────────────────────────────────
@@ -677,15 +778,14 @@ def get_user_id(x_user_id: str = Header(None)):
 # require_multimodal_access(), som anropas på ett ställe per kodväg. Tas den
 # raden bort blir funktionen publik utan att något annat behöver skrivas om.
 
-VISION_MODEL = "claude-sonnet-5"
-
 # 200 DPI ger ~2340 px långsida för A4/Letter — under Claudes tak på 2576 px,
-# och tillräckligt skarpt för brödtext i en skannad sida.
+# och tillräckligt skarpt för brödtext i en skannad sida. Högre DPI skalas ner
+# av API:t ändå och köper ingen fidelitet.
 VISION_RENDER_DPI = 200
 
-# Flera sidor per anrop ger modellen kontext över sidbrytningar; taket håller
-# enskilda requests små.
-VISION_PAGES_PER_CALL = 4
+# Tumnaglar till frontend — enda sättet för användaren att se att rätt sidor lästes.
+THUMBNAIL_DPI = 25
+MAX_THUMBNAILS = 5
 
 # Kostnadsräcke, inte kvotlogik: en skannad sida är ~1 bild ≈ tusentals
 # input-tokens. Höj medvetet, inte av misstag.
@@ -704,21 +804,6 @@ IMAGE_MEDIA_TYPES = {
 
 MULTIMODAL_GATED_MESSAGE = (
     "Scanned documents aren't supported yet — this feature is in testing"
-)
-
-VISION_SYSTEM_PROMPT = (
-    "You transcribe scanned pages and photographed notes into plain text that "
-    "will be used as study material.\n\n"
-    "- Transcribe every word you can read, verbatim and in reading order.\n"
-    "- Do not translate, summarise, correct, or rephrase anything.\n"
-    "- Keep headings, paragraph breaks, and list structure. Render tables as "
-    "plain text rows.\n"
-    "- For a diagram, chart, or figure that carries information the text does "
-    "not, add one bracketed line describing it, e.g. "
-    "[Figure: flowchart of the citric acid cycle].\n"
-    "- If part of a page is illegible, write [illegible] rather than guessing.\n"
-    "- Output the transcription only. No preamble, no commentary, no summary "
-    "of what you did."
 )
 
 
@@ -766,78 +851,137 @@ def render_pdf_pages(doc, page_count: int) -> list[tuple[str, bytes]]:
     return pages
 
 
-def transcribe_images(images: list[tuple[str, bytes]], first_page: int = 1) -> str:
+def build_thumbnails(pages: list[tuple[str, bytes]]) -> list[str]:
     """
-    Skickar bilderna till Claude som image-block i messages och returnerar
-    den sammanslagna transkriberingen.
-
-    Systemprompten ligger under cachningens minimigräns (512 tokens), så den
-    får inget cache_control — en markör där hade varit en no-op.
+    Små data-URI:er för bilaga-panelen i frontend. Renderas om från
+    originalbytes så att panelen aldrig laddar fullstora sidor.
     """
     import base64
-    from generator import client
+    import io
 
-    chunks: list[str] = []
-
-    for start in range(0, len(images), VISION_PAGES_PER_CALL):
-        batch = images[start:start + VISION_PAGES_PER_CALL]
-        content: list[dict] = []
-
-        for offset, (media_type, raw) in enumerate(batch):
-            content.append({
-                "type": "text",
-                "text": f"--- Page {first_page + start + offset} ---"
-            })
-            content.append({
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": media_type,
-                    "data": base64.standard_b64encode(raw).decode("ascii"),
-                },
-            })
-
-        content.append({
-            "type": "text",
-            "text": "Transcribe every page above, in order."
-        })
-
+    thumbs: list[str] = []
+    for media_type, raw in pages[:MAX_THUMBNAILS]:
         try:
-            response = client.beta.messages.create(
-                model=VISION_MODEL,
-                max_tokens=16000,
-                thinking={"type": "adaptive"},
-                output_config={"effort": "low"},
-                system=VISION_SYSTEM_PROMPT,
-                messages=[{"role": "user", "content": content}],
-            )
-        except Exception as e:
-            logging.exception("Vision extraction failed")
-            raise HTTPException(
-                status_code=502,
-                detail=f"Text extraction failed: {str(e)}"
-            )
+            import pymupdf
+            pix = pymupdf.Pixmap(io.BytesIO(raw))
+            scale = THUMBNAIL_DPI / VISION_RENDER_DPI
+            small = pymupdf.Pixmap(pix, int(pix.width * scale), int(pix.height * scale), False)
+            data = small.tobytes("png")
+        except Exception:
+            # Tumnaglar är kosmetiska — misslyckas de ska uppladdningen ändå gå igenom.
+            continue
+        thumbs.append(
+            "data:image/png;base64," + base64.standard_b64encode(data).decode("ascii")
+        )
+    return thumbs
 
-        if getattr(response, "stop_reason", None) == "refusal":
-            raise HTTPException(
-                status_code=422,
-                detail="The model declined to transcribe this document."
-            )
 
-        usage = response.usage
-        logging.info(
-            f"[VISION] model={VISION_MODEL} pages={len(batch)} "
-            f"input={usage.input_tokens} output={usage.output_tokens}"
+# ── resolve_source: en upplösningspunkt för text- och bildläge ───────────────
+
+class ResolvedSource:
+    """
+    Normaliserar källmaterialet så att resten av flödet slipper veta vilket
+    läge som gäller.
+
+    .text   matar ordräkning, consume_generation, SessionModel.source_material,
+            /api/sessions/{id}/source och /api/explain. I bildläge en läsbar
+            platshållare — aldrig tom sträng.
+    .images når bara generate_cards_stream(), review_cards() och /api/explain.
+    """
+
+    def __init__(self, text: str, images: list[tuple[str, bytes]] | None = None,
+                 filename: str = ""):
+        self.text = text
+        self.images = images or None
+        self.filename = filename
+
+    @property
+    def is_images(self) -> bool:
+        return bool(self.images)
+
+
+def resolve_source(
+    source_material: str = "",
+    upload_id: str = "",
+    session_id: str = "",
+    user_id: str = "",
+) -> ResolvedSource:
+    """
+    Tre anropare:
+      /api/generate  → upload_id  (staging, innan sessionen finns)
+      /api/explain   → session_id (permanent, efter att sessionen skapats)
+      textläge       → source_material, oförändrat
+    """
+    if upload_id:
+        meta = storage.read_staging_meta(upload_id)
+        if not meta:
+            raise HTTPException(status_code=404, detail="Upload not found or expired.")
+        if meta.get("user_id") != user_id:
+            raise HTTPException(status_code=404, detail="Upload not found or expired.")
+
+        images = storage.load_staging_pages(upload_id)
+        if not images:
+            raise HTTPException(status_code=404, detail="Upload not found or expired.")
+
+        filename = meta.get("filename", "document")
+        return ResolvedSource(
+            text=f"[Image-based source: {filename}, {len(images)} page(s)]",
+            images=images,
+            filename=filename,
         )
 
-        text = "".join(
-            block.text for block in response.content
-            if getattr(block, "type", "") == "text"
-        )
-        if text.strip():
-            chunks.append(text.strip())
+    if session_id:
+        # Anroparen ansvarar för ägarkontrollen innan detta anropas.
+        images = storage.load_session_pages(user_id, session_id)
+        if images:
+            return ResolvedSource(
+                text=source_material,
+                images=images,
+            )
 
-    return "\n\n".join(chunks)
+    return ResolvedSource(text=source_material)
+
+
+async def stage_pages(
+    user_id: str,
+    filename: str,
+    pages: list[tuple[str, bytes]],
+) -> dict:
+    """
+    Lägger sidbilderna i staging och returnerar referensen frontend skickar
+    vidare till /api/generate. Ingen modell anropas här — Opus 4.8 ser sidorna
+    först i genereringssteget.
+    """
+    import asyncio
+
+    # Lat städning av övergivna uppladdningar. Fel här får aldrig stoppa
+    # en giltig uppladdning.
+    try:
+        await asyncio.to_thread(storage.sweep_stale_staging)
+    except Exception:
+        logging.exception("Staging sweep failed")
+
+    try:
+        upload_id = await asyncio.to_thread(
+            storage.put_staging_pages, user_id, filename, pages
+        )
+    except Exception as e:
+        logging.exception("Staging upload failed")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not store the uploaded pages: {str(e)}"
+        )
+
+    thumbnails = await asyncio.to_thread(build_thumbnails, pages)
+
+    logging.info(f"[UPLOAD] staged {len(pages)} page(s) as {upload_id}")
+    return {
+        "mode":       "images",
+        "upload_id":  upload_id,
+        "filename":   filename,
+        "page_count": len(pages),
+        "thumbnails": thumbnails,
+    }
 
 
 @app.post("/api/upload")
@@ -857,7 +1001,7 @@ async def upload_file(
     filename = (file.filename or "").lower()
     ext = os.path.splitext(filename)[1]
 
-    # ── Bilder: alltid multimodalt, ingen textdetektion behövs ───────────────
+    # ── Bilder: alltid bildläge, ingen textdetektion behövs ──────────────────
     if ext in IMAGE_MEDIA_TYPES or content_type.startswith("image/"):
         media_type = IMAGE_MEDIA_TYPES.get(ext, content_type)
         if media_type not in set(IMAGE_MEDIA_TYPES.values()):
@@ -869,17 +1013,17 @@ async def upload_file(
         require_multimodal_access(user_id)
 
         content = await file.read()
-        text = await asyncio.to_thread(transcribe_images, [(media_type, content)])
-        if not text.strip():
-            raise HTTPException(
-                status_code=422,
-                detail="No readable text found in this image."
-            )
-        return {"text": text, "extraction": "multimodal"}
+        return await stage_pages(
+            user_id, file.filename or "image", [(media_type, content)]
+        )
 
     if ext == ".txt" or "text" in content_type:
         content = await file.read()
-        return {"text": content.decode("utf-8", errors="ignore"), "extraction": "text"}
+        return {
+            "mode": "text",
+            "text": content.decode("utf-8", errors="ignore"),
+            "extraction": "text",
+        }
 
     if ext == ".pdf" or "pdf" in content_type:
         try:
@@ -915,7 +1059,11 @@ async def upload_file(
                 is_scanned = sparse > len(page_texts) * SCANNED_PAGE_RATIO
 
                 if not is_scanned:
-                    return {"text": "".join(page_texts), "extraction": "pymupdf"}
+                    return {
+                        "mode": "text",
+                        "text": "".join(page_texts),
+                        "extraction": "pymupdf",
+                    }
 
                 require_multimodal_access(user_id)
 
@@ -937,13 +1085,7 @@ async def upload_file(
         finally:
             os.unlink(tmp_path)
 
-        text = await asyncio.to_thread(transcribe_images, images)
-        if not text.strip():
-            raise HTTPException(
-                status_code=422,
-                detail="No readable text found in this document."
-            )
-        return {"text": text, "extraction": "multimodal"}
+        return await stage_pages(user_id, file.filename or "document.pdf", images)
 
     raise HTTPException(
         status_code=400,

@@ -176,7 +176,91 @@
   pointer-events: none; /* släpp igenom drop-eventet till wrappern */
 }
 
-/* Upload progress — vision extraction on a scanned file takes seconds. */
+/* ─────────────────────────────────────────────
+   Attachment panel — replaces the textarea in image mode, where the source
+   is page images the user cannot preview or edit as text. Occupies the same
+   slot so the view's rhythm is unchanged.
+───────────────────────────────────────────── */
+.attachment {
+  width: 100%;
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: white;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 14px 16px;
+}
+
+.attachmentHeader {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.attachmentName {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.875rem;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.attachmentMeta {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.attachmentRemove {
+  margin-left: auto;
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0 4px;
+}
+.attachmentRemove:hover { color: var(--gold); }
+.attachmentRemove:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.thumbStrip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.thumb {
+  height: 76px;
+  width: auto;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: white;
+}
+
+.thumbMore {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--ink);
+  align-self: center;
+}
+
+.attachmentNote {
+  margin-top: auto;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--ink);
+  opacity: 0.75;
+}
+
+/* Upload progress — rendering and storing a scanned file takes seconds. */
 .uploadStatus {
   margin-top: 6px;
   font-family: 'DM Mono', monospace;

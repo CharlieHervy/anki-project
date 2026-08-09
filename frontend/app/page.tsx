@@ -13,6 +13,15 @@ const API = 'https://anki-project-production.up.railway.app'
 // /api/upload dispatch. Images and scanned PDFs are admin-gated server-side.
 const ACCEPTED_EXTENSIONS = ['.txt', '.pdf', '.jpg', '.jpeg', '.png']
 
+// Bildläge — sidorna ligger server-side under upload_id fram till att en
+// session skapas; frontend hanterar bara referensen och tumnaglarna.
+type Attachment = {
+  uploadId: string
+  filename: string
+  pageCount: number
+  thumbnails: string[]
+}
+
 type Card = {
   id: string
   text: string
@@ -165,6 +174,9 @@ export default function Home() {
   const [isUploading, setIsUploading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const dragDepth = useRef(0)
+  // Bildläge: uppladdningen returnerar en referens i stället för text, eftersom
+  // sidorna går direkt till modellen och aldrig blir redigerbar text.
+  const [attachment, setAttachment] = useState<Attachment | null>(null)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editText, setEditText] = useState('')
   const [editExtra, setEditExtra] = useState('')
@@ -302,7 +314,19 @@ export default function Home() {
         setError(data?.detail || "We couldn't read that file. Try another one.")
         return
       }
-      if (data?.text) {
+
+      if (data?.mode === 'images') {
+        // Sidorna finns bara server-side. Textarean töms så att det aldrig är
+        // otydligt vilket material som faktiskt skickas till modellen.
+        setAttachment({
+          uploadId: data.upload_id,
+          filename: data.filename ?? file.name,
+          pageCount: data.page_count ?? 0,
+          thumbnails: data.thumbnails ?? [],
+        })
+        setSourceText('')
+      } else if (data?.text) {
+        setAttachment(null)
         setSourceText(data.text)
       } else {
         setError("That file didn't contain any readable text.")
@@ -367,7 +391,7 @@ export default function Home() {
   // the modal's "Confirm & Generate" can re-enter it directly without re-running
   // the guards.
   async function handleGenerate() {
-    if (!sourceText.trim()) return
+    if (!sourceText.trim() && !attachment) return
     if (!user) {
       sessionStorage.setItem('dimindo_source_text', sourceText)
       openSignIn()
@@ -406,7 +430,8 @@ export default function Home() {
     startTimer()
 
     const formData = new FormData()
-    formData.append('source_material', sourceText)
+    formData.append('source_material', attachment ? '' : sourceText)
+    formData.append('upload_id', attachment?.uploadId ?? '')
     formData.append('language', language)
     formData.append('timezone', timezone)
 
@@ -523,6 +548,9 @@ export default function Home() {
           source_material: sourceMaterial,
           cards,
           messages: newMessages,
+          // Bildläge: nyckeln till sidbilderna. Servern ägarkontrollerar den
+          // och ignorerar den för textbaserade sessioner.
+          session_id: sessionId,
         }),
       })
       const data = await res.json()
@@ -912,14 +940,60 @@ export default function Home() {
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
-              <textarea
-                className={styles.textarea}
-                placeholder="Paste your source material here — or drop a .txt, .pdf, or image file…"
-                value={sourceText}
-                onChange={e => setSourceText(e.target.value)}
-                disabled={state === 'generating' || isUploading}
-                autoFocus
-              />
+              {attachment ? (
+                <div className={styles.attachment}>
+                  <div className={styles.attachmentHeader}>
+                    <span className={styles.attachmentName}>
+                      📄 {attachment.filename}
+                    </span>
+                    <span className={styles.attachmentMeta}>
+                      {attachment.pageCount} page
+                      {attachment.pageCount !== 1 ? 's' : ''}
+                    </span>
+                    <button
+                      onClick={() => setAttachment(null)}
+                      disabled={state === 'generating'}
+                      className={styles.attachmentRemove}
+                      aria-label="Remove attached file"
+                    >
+                      ×
+                    </button>
+                  </div>
+
+                  {attachment.thumbnails.length > 0 && (
+                    <div className={styles.thumbStrip}>
+                      {attachment.thumbnails.map((src, i) => (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          key={i}
+                          src={src}
+                          alt={`Page ${i + 1}`}
+                          className={styles.thumb}
+                        />
+                      ))}
+                      {attachment.pageCount > attachment.thumbnails.length && (
+                        <span className={styles.thumbMore}>
+                          +{attachment.pageCount - attachment.thumbnails.length}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  <p className={styles.attachmentNote}>
+                    Pages are sent to the model as images — no text preview or
+                    editing available.
+                  </p>
+                </div>
+              ) : (
+                <textarea
+                  className={styles.textarea}
+                  placeholder="Paste your source material here — or drop a .txt, .pdf, or image file…"
+                  value={sourceText}
+                  onChange={e => setSourceText(e.target.value)}
+                  disabled={state === 'generating' || isUploading}
+                  autoFocus
+                />
+              )}
               {isDragging && (
                 <div className={styles.dropOverlay}>Drop to upload</div>
               )}
@@ -992,7 +1066,12 @@ export default function Home() {
               />
               <button
                 onClick={handleGenerate}
-                disabled={!sourceText.trim() || state === 'generating' || wordLimitExceeded}
+                disabled={
+                  (!sourceText.trim() && !attachment) ||
+                  state === 'generating' ||
+                  isUploading ||
+                  (!attachment && wordLimitExceeded)
+                }
                 className={[styles.btnPrimary, generateIdle ? styles.btnPrimaryIdle : '']
                   .filter(Boolean)
                   .join(' ')}

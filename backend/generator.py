@@ -1648,10 +1648,51 @@ defaults it to `cloze`.
 
 """
 
-def generate_cards_stream(source_material: str, language: str = "English"):
+IMAGE_SOURCE_NOTICE = (
+    "The source material is provided as page images in the user message below. "
+    "Read them directly — there is no text transcription. Work from what you see "
+    "on the pages: formulas, tables, diagrams, and handwriting included."
+)
+
+
+def build_image_blocks(source_images: list[tuple[str, bytes]], first_page: int = 1) -> list[dict]:
+    """
+    Bygger sidmarkör + image-block per sida, i sidordning. Delas av
+    generate_cards_stream, review_cards och /api/explain så att alla tre
+    stegen ser källmaterialet presenterat på exakt samma sätt.
+    """
+    import base64
+
+    blocks: list[dict] = []
+    for offset, (media_type, raw) in enumerate(source_images):
+        blocks.append({
+            "type": "text",
+            "text": f"--- Page {first_page + offset} ---"
+        })
+        blocks.append({
+            "type": "image",
+            "source": {
+                "type": "base64",
+                "media_type": media_type,
+                "data": base64.standard_b64encode(raw).decode("ascii"),
+            },
+        })
+    return blocks
+
+
+def generate_cards_stream(
+    source_material: str,
+    language: str = "English",
+    source_images: list[tuple[str, bytes]] | None = None,
+):
     """
     Streamer kortgenerering från Claude API med Extended Thinking och Prompt Caching.
     Master Prompten cachas (statisk). Källmaterialet skickas i ett separat, ocachat block.
+
+    I bildläge (source_images satt) ser Opus 4.8 sidorna direkt som image-block i
+    messages. Det cachade systemblocket är byte-identiskt i båda lägena — hela
+    lägesskillnaden ligger i det ocachade blocket och i messages — så text- och
+    bildläge delar samma cache-entry och textlägets cachning påverkas inte.
     """
     # Statisk del — cache-kandidaten. [SOURCE_MATERIAL]-platshållaren ersätts
     # med en hänvisning så att Claude vet var materialet finns.
@@ -1659,6 +1700,24 @@ def generate_cards_stream(source_material: str, language: str = "English"):
         "[SOURCE_MATERIAL]",
         "[Källmaterialet tillhandahålls i nästa system-block nedan]"
     )
+
+    instruction = (
+        f"Generate the cards in {language}.\n"
+        "Generera korten nu. Leverera endast tabbseparerad rådata enligt leveransformatet. "
+        "Omslut INTE outputen med kodblock eller backticks. Ingen hälsning, inget eftersnack."
+    )
+
+    if source_images:
+        dynamic_block = IMAGE_SOURCE_NOTICE
+        # Bilderna först, instruktionen sist — modellen ska ha sett hela
+        # materialet innan den läser vad den ska göra med det.
+        # Ingen cache_control: sidorna används en gång, av en modell.
+        user_content = build_image_blocks(source_images) + [
+            {"type": "text", "text": instruction}
+        ]
+    else:
+        dynamic_block = source_material
+        user_content = instruction
 
     with client.beta.messages.stream(
         model=CLAUDE_MODEL,
@@ -1673,16 +1732,12 @@ def generate_cards_stream(source_material: str, language: str = "English"):
             },
             {
                 "type": "text",
-                "text": source_material                  # ← ej cachat, unikt per anrop
+                "text": dynamic_block                    # ← ej cachat, unikt per anrop
             }
         ],
         messages=[{
             "role": "user",
-            "content": (
-                f"Generate the cards in {language}.\n"
-                "Generera korten nu. Leverera endast tabbseparerad rådata enligt leveransformatet. "
-                "Omslut INTE outputen med kodblock eller backticks. Ingen hälsning, inget eftersnack."
-            )
+            "content": user_content
         }],
         betas=["prompt-caching-2024-07-31"]
     ) as stream:
@@ -1702,11 +1757,21 @@ def generate_cards_stream(source_material: str, language: str = "English"):
     final_message = stream.get_final_message()
     usage = final_message.usage
     logger.info(
-        f"[USAGE] input={usage.input_tokens} "
+        f"[USAGE] mode={'images' if source_images else 'text'} "
+        f"pages={len(source_images) if source_images else 0} "
+        f"input={usage.input_tokens} "
         f"output={usage.output_tokens} "
         f"cache_creation={getattr(usage, 'cache_creation_input_tokens', 0)} "
         f"cache_read={getattr(usage, 'cache_read_input_tokens', 0)}"
     )
+
+    # Vid xhigh kan thinking äta upp output-budgeten innan TSV:n är färdig.
+    # Utan detta ser en trunkerad körning ut som ett kortare svar.
+    if getattr(final_message, "stop_reason", None) == "max_tokens":
+        logger.warning(
+            "[USAGE] stop_reason=max_tokens — outputen trunkerades. "
+            "Sista kortet kan vara ofullständigt."
+        )
 
 
 def parse_tsv(tsv_text: str) -> list[dict]:
@@ -1751,10 +1816,19 @@ def parse_tsv(tsv_text: str) -> list[dict]:
     return cards
 
 
-def review_cards(source_material: str, cards: list[dict]) -> list[int]:
+def review_cards(
+    source_material: str,
+    cards: list[dict],
+    source_images: list[tuple[str, bytes]] | None = None,
+) -> list[int]:
     """
     Calls Claude as an independent reviewer. Returns a list of 1-based card indices
     to remove. Fails open: any error returns an empty list so generation is never blocked.
+
+    I bildläge får granskaren samma sidor som generatorn såg, och routas till
+    Sonnet 5 — Sonnet 4.6 ligger i den lägre visionklassen (1568 px) och skulle
+    granska en suddigare version än den generatorn arbetade från. Textläget är
+    byte-identiskt med tidigare: samma modell, samma budget_tokens, samma betas.
     """
     numbered_cards = "\n".join(
         f"[{i + 1}] Text: {card.get('text', '')} Extra: {card.get('extra', '')}"
@@ -1769,16 +1843,43 @@ def review_cards(source_material: str, cards: list[dict]) -> list[int]:
         "[Generated cards are provided in the next system block]"
     )
 
-    dynamic_content = (
-        f"Source material:\n{source_material}\n\n"
-        f"Generated cards:\n{numbered_cards}"
-    )
+    review_instruction = "Review the cards and return only the JSON object."
+
+    if source_images:
+        dynamic_content = (
+            f"{IMAGE_SOURCE_NOTICE}\n\n"
+            f"Generated cards:\n{numbered_cards}"
+        )
+        request_kwargs = {
+            "model": "claude-sonnet-5",
+            # budget_tokens returnerar 400 på Sonnet 5 — adaptive + effort istället.
+            "thinking": {"type": "adaptive"},
+            "output_config": {"effort": "medium"},
+            # Adaptive thinking delar max_tokens med svarstexten. 1024 räcker
+            # för JSON-svaret men inte för thinking + JSON.
+            "max_tokens": 8000,
+            "betas": ["prompt-caching-2024-07-31"],
+        }
+        # Ingen cache_control: sidorna används en gång, på en annan modell än
+        # generatorn — caches är modellscopade, så det vore ren skrivkostnad.
+        user_content = build_image_blocks(source_images) + [
+            {"type": "text", "text": review_instruction}
+        ]
+    else:
+        dynamic_content = (
+            f"Source material:\n{source_material}\n\n"
+            f"Generated cards:\n{numbered_cards}"
+        )
+        request_kwargs = {
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 1024,
+            "thinking": {"type": "enabled", "budget_tokens": 2000},
+            "betas": ["interleaved-thinking-2025-05-14", "prompt-caching-2024-07-31"],
+        }
+        user_content = review_instruction
 
     try:
         response = client.beta.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=1024,
-            thinking={"type": "enabled", "budget_tokens": 2000},
             system=[
                 {
                     "type": "text",
@@ -1792,9 +1893,9 @@ def review_cards(source_material: str, cards: list[dict]) -> list[int]:
             ],
             messages=[{
                 "role": "user",
-                "content": "Review the cards and return only the JSON object."
+                "content": user_content
             }],
-            betas=["interleaved-thinking-2025-05-14", "prompt-caching-2024-07-31"]
+            **request_kwargs
         )
     except Exception as e:
         logger.error(f"review_cards API call failed: {e}")
