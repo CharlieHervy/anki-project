@@ -791,6 +791,9 @@ MAX_THUMBNAILS = 5
 # input-tokens. Höj medvetet, inte av misstag.
 MAX_VISION_PAGES = 30
 
+# Textlagerdetektion — gäller ENBART icke-admin. Admin routas alltid till
+# vision-vägen, eftersom ett existerande textlager inte säger något om att
+# läsordningen går att lita på.
 # En sida med färre tecken än så här efter trim räknas som "utan textlager".
 SCANNED_MIN_CHARS_PER_PAGE = 10
 # Andel sådana sidor som gör att hela dokumentet klassas som skannat.
@@ -1044,41 +1047,53 @@ async def upload_file(
             try:
                 page_texts = [page.get_text() for page in doc]
 
-                if not page_texts:
+                page_count = doc.page_count
+
+                if not page_count:
                     raise HTTPException(
                         status_code=400,
                         detail="Could not read any pages from this PDF."
                     )
 
-                # Detektion läser bara längden på text vi redan extraherat —
-                # ingen extra bearbetning per sida för digitala PDF:er.
-                sparse = sum(
-                    1 for t in page_texts
-                    if len(t.strip()) < SCANNED_MIN_CHARS_PER_PAGE
-                )
-                is_scanned = sparse > len(page_texts) * SCANNED_PAGE_RATIO
+                # Admin kör alltid vision-vägen — ingen textlagerdetektion.
+                # Ett textlager kan finnas och ändå ha fel läsordning: ett bråk
+                # exporterat från Word/LaTeX ligger som separata textobjekt, och
+                # pymupdf läser "A = b·h" och "2" som två rader. Att textlagret
+                # FINNS säger ingenting om att ordningen går att lita på, och
+                # det går inte att avgöra i förväg.
+                #
+                # Alla andra planer: oförändrad detektion. Digitala PDF:er går
+                # textvägen precis som tidigare, dokument utan textlager möter
+                # gaten.
+                if lookup_plan(user_id) != "admin":
+                    page_texts = [page.get_text() for page in doc]
+                    sparse = sum(
+                        1 for t in page_texts
+                        if len(t.strip()) < SCANNED_MIN_CHARS_PER_PAGE
+                    )
+                    if sparse <= len(page_texts) * SCANNED_PAGE_RATIO:
+                        return {
+                            "mode": "text",
+                            "text": "".join(page_texts),
+                            "extraction": "pymupdf",
+                        }
+                    require_multimodal_access(user_id)  # → 403
 
-                if not is_scanned:
-                    return {
-                        "mode": "text",
-                        "text": "".join(page_texts),
-                        "extraction": "pymupdf",
-                    }
-
-                require_multimodal_access(user_id)
-
-                if len(page_texts) > MAX_VISION_PAGES:
+                # Blockera, fall INTE tillbaka till textvägen. En tyst
+                # degradering till den kända opålitliga extraktionen är exakt
+                # felet vi just spårade upp.
+                if page_count > MAX_VISION_PAGES:
                     raise HTTPException(
                         status_code=413,
                         detail=(
-                            f"Scanned PDFs are limited to {MAX_VISION_PAGES} pages "
-                            f"per upload — this file has {len(page_texts)}. "
-                            "Split it and upload the parts separately."
+                            f"This document has {page_count} pages. Vision mode "
+                            f"supports up to {MAX_VISION_PAGES} pages — please "
+                            "split the document or contact support."
                         )
                     )
 
                 images = await asyncio.to_thread(
-                    render_pdf_pages, doc, len(page_texts)
+                    render_pdf_pages, doc, page_count
                 )
             finally:
                 doc.close()
