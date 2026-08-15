@@ -628,9 +628,10 @@ async def explain(
     Session-scoped AI-chatt i granskningsvyn.
     Inget kvotavdrag. Ingen streaming. Svarar på studentens språk.
 
-    I bildläge får chatten samma sidor som generatorn och granskaren såg,
-    och routas till Sonnet 5 — Haiku 4.5 ligger i den lägre visionklassen
-    (1568 px) och skulle inte läsa tät matematisk notation tillförlitligt.
+    I bildläge får chatten sidorna nedskalade till 1568 px och körs på
+    Haiku 4.5. Generering och granskning kör kvar på full upplösning — de
+    avgör kortens korrekthet. Chatten har hela kortlistan i kontexten och
+    använder sidorna som referens, så den lägre upplösningen räcker.
     Textläget är oförändrat: Haiku 4.5, samma max_tokens, ingen cache_control.
     """
     from generator import client
@@ -646,7 +647,10 @@ async def explain(
             src = await asyncio.to_thread(
                 resolve_source, body.source_material, "", body.session_id, x_user_id
             )
-            source_images = src.images
+            if src.images:
+                source_images = await asyncio.to_thread(
+                    downscale_pages, src.images, CHAT_IMAGE_MAX_EDGE
+                )
 
     cards_text = "\n\n".join(
         f"Card {i + 1}:\nFront: {c.text}\nBack: {c.extra}"
@@ -737,19 +741,15 @@ async def explain(
 
         messages[0] = {"role": "user", "content": image_blocks + tail}
 
-        # output_config kräver beta-namespacet i den här SDK-versionen.
+        # Haiku 4.5, inte Sonnet 5: sidorna är nedskalade till 1568 px, vilket
+        # är precis Haikus visionklass, och chatten har kortlistan i kontexten.
+        # Haiku tänker inte alls — inga thinking-tokens att betala för — och
+        # kostar $1/$5 per MTok mot Sonnet 5:s $3/$15.
+        # Beta-namespacet: cache_control med ttl ligger i beta-typerna.
         def call():
             return client.beta.messages.create(
-                model="claude-sonnet-5",
-                # Sonnet 5 kör adaptive thinking som default; sätts explicit så
-                # att djupet är ett val. Thinking delar max_tokens med
-                # svarstexten — 2048 skulle kunna ätas upp av thinking och ge
-                # tomt svar.
-                thinking={"type": "adaptive"},
-                # low, inte medium: thinking debiteras som output ($10/MTok) och
-                # en studiechatt behöver sällan djupt resonemang.
-                output_config={"effort": "low"},
-                max_tokens=8000,
+                model="claude-haiku-4-5",
+                max_tokens=2048,
                 system=system_prompt,
                 messages=messages,
                 betas=["prompt-caching-2024-07-31"],
@@ -821,6 +821,13 @@ VISION_RENDER_DPI = 200
 THUMBNAIL_DPI = 25
 MAX_THUMBNAILS = 5
 
+# Chatten får nedskalade sidkopior. Generering och granskning kör kvar på full
+# upplösning: de avgör om korten blir korrekta. Chatten har hela kortlistan i
+# kontexten och använder sidorna som referens, inte som transkriberingsmål —
+# därför räcker den lägre visionklassens 1568 px, vilket i sin tur gör att
+# chatten kan köra Haiku 4.5 i stället för Sonnet 5.
+CHAT_IMAGE_MAX_EDGE = 1568
+
 # Kostnadsräcke, inte kvotlogik: en skannad sida är ~1 bild ≈ tusentals
 # input-tokens. Höj medvetet, inte av misstag.
 MAX_VISION_PAGES = 30
@@ -886,6 +893,39 @@ def render_pdf_pages(doc, page_count: int) -> list[tuple[str, bytes]]:
         pix = doc[n].get_pixmap(dpi=VISION_RENDER_DPI)
         pages.append(("image/png", pix.tobytes("png")))
     return pages
+
+
+def downscale_pages(
+    pages: list[tuple[str, bytes]],
+    max_edge: int,
+) -> list[tuple[str, bytes]]:
+    """
+    Skalar ned sidbilder så längsta sidan blir max_edge px. Bildtokens skalar
+    med ytan, så 200 DPI → 1568 px är ungefär en halvering.
+
+    Misslyckas nedskalningen används originalet — en dyrare bild är bättre än
+    ingen bild.
+    """
+    import io
+    import pymupdf
+
+    out: list[tuple[str, bytes]] = []
+    for media_type, raw in pages:
+        try:
+            pix = pymupdf.Pixmap(io.BytesIO(raw))
+            longest = max(pix.width, pix.height)
+            if longest <= max_edge:
+                out.append((media_type, raw))
+                continue
+            scale = max_edge / longest
+            small = pymupdf.Pixmap(
+                pix, int(pix.width * scale), int(pix.height * scale), False
+            )
+            out.append(("image/png", small.tobytes("png")))
+        except Exception:
+            logging.exception("Page downscale failed — using full-size page")
+            out.append((media_type, raw))
+    return out
 
 
 def build_thumbnails(pages: list[tuple[str, bytes]]) -> list[str]:
