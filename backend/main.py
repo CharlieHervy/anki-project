@@ -653,6 +653,14 @@ async def explain(
         for i, c in enumerate(body.cards)
     )
 
+    # I bildläge hålls kortlistan UTANFÖR systemprompten. Systemprompten
+    # renderas före bilderna, och caching är en prefixmatchning: låg kortlistan
+    # kvar här skulle varje redigering, godkännande eller decknamn-ändring
+    # invalidera de cachade sidbilderna och tvinga fram en ny skrivning på
+    # ~4 800 tokens per sida. Kortlistan flyttas i stället till user-meddelandet,
+    # bakom cache-brytpunkten, där en ändring bara kostar sitt eget textblock.
+    cards_section = "" if source_images else f"GENERATED FLASHCARDS:\n{cards_text}\n\n"
+
     system_prompt = (
       "You are a knowledgeable study assistant embedded in Dimindo, "
         "an AI-powered flashcard application.\n\n"
@@ -661,7 +669,7 @@ async def explain(
         "what the student is studying — but draw freely on your full knowledge "
         "to explain, connect, and expand on any concept they ask about.\n\n"
         f"SOURCE MATERIAL:\n{body.source_material}\n\n"
-        f"GENERATED FLASHCARDS:\n{cards_text}\n\n"
+        f"{cards_section}"
         "Instructions:\n"
         "- Always respond in the same language the student writes in.\n"
         "- Be concise by default. Expand only when the student explicitly "
@@ -707,17 +715,27 @@ async def explain(
     if source_images and messages:
         # Historiken skickas hel vid varje anrop, så bilderna måste med varje
         # gång — annars tappar chatten källförankringen efter första svaret.
-        # De läggs i FÖRSTA meddelandet och cachas: prefixet (system + sidor +
-        # första frågan) är stabilt mellan turer, så tur 2 och framåt läser
-        # cachen i stället för att betala för ~4 800 tokens per sida på nytt.
-        # 1h TTL — en granskningssession spänner lätt längre än cachens
-        # 5-minutersdefault.
+        #
+        # Ordningen i första meddelandet är det som avgör kostnaden:
+        #
+        #   system (statisk)                    ─┐
+        #   sidbilder … cache_control            ├─ cachat prefix, stabilt
+        #                                       ─┘
+        #   kortlistan                          ─┐ bakom brytpunkten:
+        #   användarens fråga                   ─┘ ändras fritt, kostar sitt eget
+        #
+        # Kortlistan ändras varje gång ett kort godkänns, redigeras eller får
+        # nytt decknamn. Låg den före brytpunkten skrevs sidbilderna om varje
+        # gång — ~20x kostnaden per meddelande.
         image_blocks = build_image_blocks(source_images)
         image_blocks[-1]["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
-        messages[0] = {
-            "role": "user",
-            "content": image_blocks + [{"type": "text", "text": messages[0]["content"]}],
-        }
+
+        tail = []
+        if cards_text:
+            tail.append({"type": "text", "text": f"GENERATED FLASHCARDS:\n{cards_text}"})
+        tail.append({"type": "text", "text": messages[0]["content"]})
+
+        messages[0] = {"role": "user", "content": image_blocks + tail}
 
         # output_config kräver beta-namespacet i den här SDK-versionen.
         def call():
@@ -728,7 +746,9 @@ async def explain(
                 # svarstexten — 2048 skulle kunna ätas upp av thinking och ge
                 # tomt svar.
                 thinking={"type": "adaptive"},
-                output_config={"effort": "medium"},
+                # low, inte medium: thinking debiteras som output ($10/MTok) och
+                # en studiechatt behöver sällan djupt resonemang.
+                output_config={"effort": "low"},
                 max_tokens=8000,
                 system=system_prompt,
                 messages=messages,
@@ -748,6 +768,20 @@ async def explain(
         response = await asyncio.to_thread(call)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI error: {str(e)}")
+
+    # Cache-träffar syns bara här. cache_read ≫ cache_creation från och med
+    # andra meddelandet betyder att prefixet håller; ett cache_creation som
+    # återkommer på varje tur betyder att något invaliderar det.
+    usage = response.usage
+    logging.info(
+        f"[EXPLAIN] mode={'images' if source_images else 'text'} "
+        f"pages={len(source_images) if source_images else 0} "
+        f"turns={len(body.messages)} "
+        f"input={usage.input_tokens} "
+        f"output={usage.output_tokens} "
+        f"cache_creation={getattr(usage, 'cache_creation_input_tokens', 0)} "
+        f"cache_read={getattr(usage, 'cache_read_input_tokens', 0)}"
+    )
 
     if not response.content:
         raise HTTPException(status_code=500, detail="Empty response from AI")
