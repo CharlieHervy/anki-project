@@ -75,7 +75,16 @@ def create_cloze_model() -> genanki.Model:
 
 .bild-container img {
   max-width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
   border-radius: 4px;
+}
+
+/* Flera bilder på samma kort staplas — utan detta ligger de kant i kant. */
+.bild-container img + img {
+  margin-top: 10px;
 }
 """
 
@@ -168,7 +177,16 @@ def create_basic_model() -> genanki.Model:
 
 .bild-container img {
   max-width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
   border-radius: 4px;
+}
+
+/* Flera bilder på samma kort staplas — utan detta ligger de kant i kant. */
+.bild-container img + img {
+  margin-top: 10px;
 }
 """
 
