@@ -43,6 +43,30 @@ class CardModel(Base):
     card_type = Column(String, default='cloze')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     session = relationship("SessionModel", back_populates="cards")
+    images = relationship(
+        "CardImageModel",
+        back_populates="card",
+        cascade="all, delete-orphan",
+        order_by="CardImageModel.position",
+    )
+
+
+class CardImageModel(Base):
+    """
+    Användartillagda bilder på ett kort. Egen tabell, inte en kolumn på cards,
+    eftersom flera bilder per kort stöds och ordningen mellan dem är data.
+
+    storage_path pekar in i den privata bucketen 'card-images'; se
+    card_image_storage.py för sökvägskonventionen.
+    """
+    __tablename__ = "card_images"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    card_id = Column(UUID(as_uuid=True), ForeignKey("cards.id", ondelete="CASCADE"), nullable=False)
+    storage_path = Column(String, nullable=False)
+    position = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    card = relationship("CardModel", back_populates="images")
 
 
 class DemoCard(Base):

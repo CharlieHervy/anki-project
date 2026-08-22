@@ -22,6 +22,15 @@ type Attachment = {
   thumbnails: string[]
 }
 
+// En bild användaren lagt på ett kort. url är en signerad länk mot den privata
+// card-images-bucketen och är null om signeringen misslyckades — miniatyren
+// renderas då som en platshållare, men bilden finns kvar och följer med exporten.
+type CardImage = {
+  id: string
+  url: string | null
+  position: number
+}
+
 type Card = {
   id: string
   text: string
@@ -31,7 +40,13 @@ type Card = {
   logg: string
   approved: boolean
   card_type: 'cloze' | 'qa'
+  images?: CardImage[]
 }
+
+// Speglar backendens card_image_storage.EXTENSION_BY_MEDIA_TYPE. Kontrollen
+// här är bara för att slippa en round-trip på en uppenbart fel fil — servern
+// är den som avgör.
+const ACCEPTED_IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp']
 
 type AiMessage = { role: 'user' | 'assistant'; content: string }
 
@@ -206,6 +221,17 @@ export default function Home() {
   // ──────────────────────────────────────────────────────
 
   // ── Sidebar state ──────────────────────────────────────
+  // ── Kortbilder (admin-gatead; servern avgör via images_enabled) ──────────
+  const [imagesEnabled, setImagesEnabled] = useState(false)
+  // Kort-id med en uppladdning i flykten — spärrar dubbeldropp och visar spinner.
+  const [imageBusyIds, setImageBusyIds] = useState<Set<string>>(new Set())
+  // Kortet som just nu är drag-over. Ett id, inte ett index: listan kan
+  // omordnas mellan render och drop.
+  const [dragCardId, setDragCardId] = useState<string | null>(null)
+  // Kortet ett Ctrl/Cmd+V ska landa på. I en ref, inte state: paste-lyssnaren
+  // sitter på document och får inte bindas om vid varje hover.
+  const pasteTargetRef = useRef<string | null>(null)
+
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarSessions, setSidebarSessions] = useState<Session[]>([])
   const [sidebarLoading, setSidebarLoading] = useState(false)
@@ -251,6 +277,7 @@ export default function Home() {
       .then(data => {
         const loaded = data.cards ?? []
         setCards(loaded)
+        setImagesEnabled(data.images_enabled === true)
         // Pre-fill the deck name from the loaded session so the field reflects
         // the stored name (avoids an empty field overwriting it on blur).
         const storedDeck = loaded[0]?.deck ?? ''
@@ -473,6 +500,7 @@ export default function Home() {
               })
               const cardsData = await cardsRes.json()
               setCards(cardsData.cards)
+              setImagesEnabled(cardsData.images_enabled === true)
               fetch(`${API}/api/sessions/${currentSessionId}/source`, {
                 headers: authHeaders,
               })
@@ -608,6 +636,113 @@ export default function Home() {
     setEditingIndex(null)
   }
 
+  // --- Card images ---
+  // Dropp och klistra-in går båda hit: paste-handlern packar urklippets
+  // bilddata som en File innan den anropar, så det finns en enda uppladdningsväg
+  // precis som uploadFile() är den enda vägen för källmaterial.
+  // Uppladdningen sker direkt, utan separat spara-steg — samma mönster som
+  // redigeringens auto-save.
+  async function uploadCardImage(cardId: string, file: File) {
+    if (!sessionId || !imagesEnabled) return
+    if (file.type && !ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+      setError('Image format not supported. Use PNG, JPG, GIF or WebP.')
+      return
+    }
+
+    setError('')
+    setImageBusyIds(prev => new Set(prev).add(cardId))
+    try {
+      const formData = new FormData()
+      // Urklippsfiler saknar ofta namn — ge ett så att multipart-delen är
+      // välformad. Backend bestämmer ändå ändelsen från content-type.
+      formData.append('file', file, file.name || 'pasted-image.png')
+
+      const res = await fetch(`${API}/api/cards/${sessionId}/${cardId}/images`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: formData,
+      })
+      const data = await res.json().catch(() => null)
+
+      if (!res.ok) {
+        setError(data?.detail || "We couldn't add that image. Try another one.")
+        return
+      }
+
+      setCards(prev =>
+        prev.map(c =>
+          c.id === cardId ? { ...c, images: [...(c.images ?? []), data as CardImage] } : c
+        )
+      )
+    } catch {
+      setError("We couldn't add that image. Try again.")
+    } finally {
+      setImageBusyIds(prev => {
+        const next = new Set(prev)
+        next.delete(cardId)
+        return next
+      })
+    }
+  }
+
+  // Flera filer i ett dropp laddas upp i tur och ordning så att position i
+  // databasen följer den ordning användaren släppte dem i.
+  async function uploadCardImages(cardId: string, files: File[]) {
+    for (const file of files) {
+      await uploadCardImage(cardId, file)
+    }
+  }
+
+  async function deleteCardImage(cardId: string, imageId: string) {
+    if (!sessionId || !imagesEnabled) return
+    const res = await fetch(
+      `${API}/api/cards/${sessionId}/${cardId}/images/${imageId}`,
+      { method: 'DELETE', headers: authHeaders }
+    )
+    if (!res.ok) {
+      setError("We couldn't remove that image. Try again.")
+      return
+    }
+    setCards(prev =>
+      prev.map(c =>
+        c.id === cardId
+          ? { ...c, images: (c.images ?? []).filter(img => img.id !== imageId) }
+          : c
+      )
+    )
+  }
+
+  // Ctrl/Cmd+V på ett hovrat kort. Lyssnaren sitter på document eftersom ett
+  // <div> inte tar emot paste-event utan att göras fokuserbart — hovern i
+  // pasteTargetRef är det som avgör vilket kort bilden hamnar på.
+  useEffect(() => {
+    if (state !== 'review' || !imagesEnabled) return
+
+    function onPaste(e: ClipboardEvent) {
+      const cardId = pasteTargetRef.current
+      if (!cardId) return
+
+      // Klistra in i ett textfält är fortfarande att klistra in text.
+      const target = e.target as HTMLElement | null
+      if (target?.closest?.('input, textarea, [contenteditable="true"]')) return
+
+      const item = Array.from(e.clipboardData?.items ?? []).find(
+        it => it.kind === 'file' && it.type.startsWith('image/')
+      )
+      const file = item?.getAsFile()
+      if (!file) return
+
+      e.preventDefault()
+      uploadCardImage(cardId, file)
+    }
+
+    document.addEventListener('paste', onPaste)
+    return () => document.removeEventListener('paste', onPaste)
+    // uploadCardImage läses vid anrop, inte vid bindning — lyssnaren behöver
+    // bara bindas om när vyn eller gaten ändras.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, imagesEnabled, sessionId])
+
   function startTimer() {
     setElapsedSeconds(0)
     timerRef.current = setInterval(() => {
@@ -702,6 +837,9 @@ export default function Home() {
     setAiMessages([])
     setAiInput('')
     setAiLoading(false)
+    setDragCardId(null)
+    setImageBusyIds(new Set())
+    pasteTargetRef.current = null
   }
 
   // ── Word count + quota-aware limit ─────────────────────
@@ -1199,10 +1337,47 @@ export default function Home() {
                 // zone simply renders as an empty band). Hidden only when both
                 // fields are empty.
                 const showPanel = !!(card.text.trim() || card.extra.trim())
+                const images = card.images ?? []
+                const imageBusy = imageBusyIds.has(card.id)
+                // Dropzon och paste finns bara när servern sagt att bilder är
+                // påslagna. För alla andra planer är funktionen osynlig, inte
+                // synlig-men-blockerad.
+                const dropProps = imagesEnabled
+                  ? {
+                      onMouseEnter: () => { pasteTargetRef.current = card.id },
+                      onMouseLeave: () => {
+                        if (pasteTargetRef.current === card.id) pasteTargetRef.current = null
+                      },
+                      onDragOver: (e: React.DragEvent) => {
+                        // Textdragg i redigeringsläget ska fortfarande gå till
+                        // textarean — bara filer kapas.
+                        if (!e.dataTransfer.types.includes('Files')) return
+                        e.preventDefault()
+                        setDragCardId(card.id)
+                      },
+                      onDragLeave: (e: React.DragEvent) => {
+                        if (e.currentTarget.contains(e.relatedTarget as Node)) return
+                        setDragCardId(prev => (prev === card.id ? null : prev))
+                      },
+                      onDrop: (e: React.DragEvent) => {
+                        if (!e.dataTransfer.types.includes('Files')) return
+                        e.preventDefault()
+                        setDragCardId(null)
+                        const files = Array.from(e.dataTransfer.files)
+                        if (files.length) uploadCardImages(card.id, files)
+                      },
+                    }
+                  : {}
                 return (
                   <div
                     key={i}
-                    className={`${styles.card}${!card.approved ? ` ${styles.cardRejected}` : ''}`}
+                    className={[
+                      styles.card,
+                      !card.approved ? styles.cardRejected : '',
+                      imagesEnabled ? styles.cardDroppable : '',
+                      dragCardId === card.id ? styles.cardDropActive : '',
+                    ].filter(Boolean).join(' ')}
+                    {...dropProps}
                   >
                     {editingIndex === i ? (
                       <div className={styles.editForm}>
@@ -1314,6 +1489,48 @@ export default function Home() {
 
                         {/* Zone 3 — log: separate block, never editable */}
                         {logg && <div className={styles.loggZone}>{logg}</div>}
+                      </>
+                    )}
+
+                    {/* Zone 4 — bilder. Ligger utanför edit/display-grenen så
+                        miniatyrerna står kvar medan kortets text redigeras.
+                        Renderas överhuvudtaget inte utan gaten. */}
+                    {imagesEnabled && (
+                      <>
+                        {images.length > 0 && (
+                          <div className={styles.cardImages}>
+                            {images.map(img => (
+                              <div key={img.id} className={styles.cardImageThumb}>
+                                {img.url ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={img.url}
+                                    alt=""
+                                    className={styles.cardImage}
+                                  />
+                                ) : (
+                                  <span className={styles.cardImageMissing}>?</span>
+                                )}
+                                <button
+                                  type="button"
+                                  className={styles.cardImageRemove}
+                                  onClick={() => deleteCardImage(card.id, img.id)}
+                                  aria-label="Remove image"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className={styles.cardDropHint}>
+                          {imageBusy
+                            ? 'Adding image…'
+                            : dragCardId === card.id
+                              ? 'Drop to add image'
+                              : 'Drop or paste an image'}
+                        </div>
                       </>
                     )}
                   </div>

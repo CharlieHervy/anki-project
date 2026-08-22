@@ -158,6 +158,18 @@ def create_basic_model() -> genanki.Model:
   padding-top: 8px;
   margin-top: 8px;
 }
+
+/* ── Bild ───────────────────────────────────────────────────── */
+/* Basic har inget eget Bild-fält (se export_to_apkg) — bildmarkupen läggs
+   in i Back-fältet och bär den här klassen, så regeln matchar Cloze. */
+.bild-container {
+  margin-top: 16px;
+}
+
+.bild-container img {
+  max-width: 100%;
+  border-radius: 4px;
+}
 """
 
     qfmt = '<div class="dimindo-card">{{Front}}</div>'
@@ -185,10 +197,20 @@ def create_basic_model() -> genanki.Model:
     )
 
 
-def export_to_apkg(cards: list[dict], output_path: str) -> str:
+def export_to_apkg(
+    cards: list[dict],
+    output_path: str,
+    media_files: list[str] | None = None,
+) -> str:
     """
     Tar en lista av godkända kort och exporterar till .apkg-fil.
     Grupperar kort per kortlek (deck-fältet). Returnerar output_path.
+
+    media_files är absoluta sökvägar till bildfiler på disk. genanki läser dem
+    vid write_to_file och lagrar dem i paketet under enbart sitt basename
+    (Package.write_to_file: os.path.basename), så namnen MÅSTE vara unika över
+    hela paketet — annars skriver ett korts bild över ett annats vid import.
+    Anroparen ansvarar för namngivningen; se /api/export i main.py.
     """
     cloze_model = create_cloze_model()
     basic_model = create_basic_model()
@@ -201,11 +223,22 @@ def export_to_apkg(cards: list[dict], output_path: str) -> str:
             decks_dict[deck_name] = genanki.Deck(deck_id, deck_name)
 
         if card.get('card_type') == 'qa':
+            # Dimindo_Basic har medvetet INGET Bild-fält. Att lägga till ett
+            # fält ändrar notetypens schema, och Anki matchar notetyper på
+            # model_id vid import: en användare som redan har Dimindo_Basic i
+            # sin samling skulle få korten importerade under en andra,
+            # suffixad notetyp i stället för sin befintliga. Bildmarkupen
+            # läggs därför i Back-fältet, inuti samma .bild-container som
+            # Cloze använder — samma rendering, noll schemaändring.
+            back = card.get('extra', '')
+            bild = card.get('bild', '')
+            if bild:
+                back = f'{back}<div class="bild-container">{bild}</div>'
             note = genanki.Note(
                 model=basic_model,
                 fields=[
                     card.get('text', ''),
-                    card.get('extra', ''),
+                    back,
                     card.get('logg', ''),
                 ],
                 tags=[card.get('tags', '')] if card.get('tags') else []
@@ -223,7 +256,7 @@ def export_to_apkg(cards: list[dict], output_path: str) -> str:
             )
         decks_dict[deck_name].add_note(note)
 
-    package = genanki.Package(list(decks_dict.values()))
+    package = genanki.Package(list(decks_dict.values()), media_files=media_files or [])
     package.write_to_file(output_path)
 
     return output_path

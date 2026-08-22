@@ -857,6 +857,96 @@
 }
 .cardRejected .loggZone { color: var(--muted); }
 
+/* ── Zone 4 — kortbilder ──
+   Hela kortskalet är dropzonen. Samma mönster som uppladdningsvyns dropzone:
+   drag-over färgar om den befintliga ramen till guld i stället för att lägga
+   till en andra — här kortskalets ram, där uppe textarean's.
+   Renderas bara för planer där funktionen är påslagen. */
+.cardDroppable { position: relative; }
+
+.cardDropActive {
+  border-color: var(--gold);
+  background: var(--cream);
+}
+
+/* Miniatyrrad. Vit platta som de andra zonerna, bilderna ligger på rad och
+   wrappar när de blir fler än raden rymmer. */
+.cardImages {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 8px;
+  background: white;
+  border-radius: 4px;
+}
+
+.cardImageThumb {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.cardImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Signeringen misslyckades — bilden finns kvar och följer med exporten, så
+   rutan får inte läsas som "borta". */
+.cardImageMissing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.cardImageRemove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+.cardImageRemove:hover { color: var(--ink); border-color: var(--muted); }
+
+/* Affordansen. Diskret på beige skal, tänds vid hover över kortet och blir
+   guld under själva draget — samma färgspråk som dropOverlay. */
+.cardDropHint {
+  margin-top: 6px;
+  padding: 0 2px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: transparent;
+  transition: color 0.15s;
+  user-select: none;
+}
+.cardsList .card:hover .cardDropHint { color: var(--muted); }
+.cardDropActive .cardDropHint { color: var(--gold); }
+
 /* ─────────────────────────────────────────────
    Edit form (inside the beige shell)
    Each field is a DM Mono "header-remsa" label on the beige shell sitting

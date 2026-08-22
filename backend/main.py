@@ -3,6 +3,7 @@ import uuid
 import json
 import asyncio
 import logging
+import shutil
 import tempfile
 import stripe
 
@@ -20,8 +21,9 @@ from fastapi.responses import FileResponse, StreamingResponse, Response
 from sqlalchemy.orm import Session
 from generator import generate_cards_stream, parse_tsv, review_cards, build_image_blocks
 from exporter import export_to_apkg
-from database import get_db, SessionModel, CardModel, DemoCard
+from database import get_db, SessionModel, CardModel, CardImageModel, DemoCard
 import storage
+import card_image_storage
 
 app = FastAPI()
 
@@ -886,6 +888,88 @@ def require_multimodal_access(user_id: str) -> None:
         raise HTTPException(status_code=403, detail=MULTIMODAL_GATED_MESSAGE)
 
 
+# ── Kortbilder (bilder användaren lägger på ett kort i granskningsvyn) ───────
+#
+# Samma uppdelning som multimodal-vägen ovan: lagring, export och rendering är
+# plan-agnostiska. Hela behörighetsskillnaden ligger i
+# require_card_image_access(), som anropas på ett ställe per skrivande kodväg.
+# Tas de raderna bort blir funktionen publik utan att något annat skrivs om.
+
+CARD_IMAGE_GATED_MESSAGE = (
+    "Card images aren't supported yet — this feature is in testing"
+)
+
+# Tak per kort. Inte kvotlogik — ett kort med tjugo bilder är ett trasigt kort,
+# och taket håller .apkg-storleken förutsägbar.
+MAX_IMAGES_PER_CARD = 8
+
+# Livslängd på de signerade miniatyr-URL:erna i GET /api/cards. En timme täcker
+# en normal granskningssession utan omladdning; kortare TTL:er ger trasiga
+# miniatyrer mitt i granskningen, längre håller en läckt URL giltig i onödan.
+# URL:erna signeras om vid varje sidladdning, så kostnaden är ett anrop.
+CARD_IMAGE_URL_TTL_SECONDS = 3600
+
+
+def require_card_image_access(user_id: str) -> None:
+    """Tunn behörighetskontroll — enda stället där kortbilder är plan-beroende."""
+    if lookup_plan(user_id) != "admin":
+        raise HTTPException(status_code=403, detail=CARD_IMAGE_GATED_MESSAGE)
+
+
+def parse_uuid(value: str, what: str) -> uuid.UUID:
+    """
+    Sökvägssegment når en UUID-kolumn i WHERE. Ett trasigt värde skulle annars
+    bli 'invalid input syntax for type uuid' från psycopg2 — ett 500 där 404
+    är det korrekta svaret.
+    """
+    try:
+        return uuid.UUID(value)
+    except (ValueError, AttributeError, TypeError):
+        raise HTTPException(status_code=404, detail=f"{what} hittades inte")
+
+
+def load_owned_card(
+    db: Session, session_id: str, card_id: str, user_id: str
+) -> CardModel:
+    """
+    Ägarkontrollen för allt som rör ett korts bilder: kortet måste finnas,
+    ligga i den angivna sessionen och tillhöra den anropande användaren.
+    Sökvägen i Storage byggs sedan av de här verifierade id:na.
+    """
+    card = db.query(CardModel).filter(
+        CardModel.id == parse_uuid(card_id, "Kort"),
+        CardModel.session_id == parse_uuid(session_id, "Session"),
+        CardModel.user_id == user_id,
+    ).first()
+    if not card:
+        raise HTTPException(status_code=404, detail="Kort hittades inte")
+    return card
+
+
+def load_card_images(db: Session, card_ids: list) -> dict[str, list[CardImageModel]]:
+    """
+    Alla bilder för en lista kort i EN fråga, grupperade per kort-id.
+
+    Medvetet inte lazy-laddade relationer: granskningsvyn hämtar hela
+    sessionen på en gång, och card.images per kort skulle ge en fråga per kort
+    (N+1). Signeringen av URL:erna batchas på samma sätt i anroparen.
+    """
+    if not card_ids:
+        return {}
+
+    rows = (
+        db.query(CardImageModel)
+        .filter(CardImageModel.card_id.in_(card_ids))
+        .order_by(CardImageModel.card_id, CardImageModel.position, CardImageModel.created_at)
+        .all()
+    )
+
+    grouped: dict[str, list[CardImageModel]] = {}
+    for row in rows:
+        grouped.setdefault(str(row.card_id), []).append(row)
+    return grouped
+
+
 def render_pdf_pages(doc, page_count: int) -> list[tuple[str, bytes]]:
     """Renderar varje sida till PNG. Returnerar (media_type, bytes) per sida."""
     pages = []
@@ -1190,25 +1274,162 @@ async def get_cards(
     user_id: str = Depends(get_user_id),
     db: Session = Depends(get_db)
 ):
-    """Returnerar alla kort för en session."""
+    """
+    Returnerar alla kort för en session, med varje korts bilder.
+
+    images_enabled speglar samma gate som skrivendpointerna. Frontend kan inte
+    läsa planen här (kvoten hämtas bara i upload-vyn, och en session som öppnas
+    via ?session_id= går direkt till granskning), så flaggan följer med svaret
+    i stället — servern förblir den auktoritativa gaten.
+    """
     cards = db.query(CardModel).filter(
         CardModel.session_id == session_id,
         CardModel.user_id == user_id
     ).order_by(CardModel.position).all()
 
-    return {"cards": [
-        {
-            "text": c.text,
-            "extra": c.extra,
-            "tags": c.tags,
-            "deck": c.deck,
-            "logg": c.logg,
-            "approved": c.approved,
-            "card_type": c.card_type or 'cloze',
-            "id": str(c.id)
-        }
-        for c in cards
-    ]}
+    images_by_card = load_card_images(db, [c.id for c in cards])
+
+    # Ett signeringsanrop för hela sessionen, inte ett per bild — annars kostar
+    # granskningsvyn en round-trip per miniatyr.
+    all_paths = [img.storage_path for imgs in images_by_card.values() for img in imgs]
+    signed: dict[str, str] = {}
+    if all_paths:
+        signed = await asyncio.to_thread(
+            card_image_storage.sign_urls, all_paths, CARD_IMAGE_URL_TTL_SECONDS
+        )
+
+    plan = await asyncio.to_thread(lookup_plan, user_id)
+
+    return {
+        "images_enabled": plan == "admin",
+        "cards": [
+            {
+                "text": c.text,
+                "extra": c.extra,
+                "tags": c.tags,
+                "deck": c.deck,
+                "logg": c.logg,
+                "approved": c.approved,
+                "card_type": c.card_type or 'cloze',
+                "id": str(c.id),
+                "images": [
+                    {
+                        "id": str(img.id),
+                        "url": signed.get(img.storage_path),
+                        "position": img.position,
+                    }
+                    for img in images_by_card.get(str(c.id), [])
+                ],
+            }
+            for c in cards
+        ],
+    }
+
+
+# ── /api/cards/{session_id}/{card_id}/images ─────────────────────────────────
+
+@app.post("/api/cards/{session_id}/{card_id}/images")
+async def add_card_image(
+    session_id: str,
+    card_id: str,
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db)
+):
+    """
+    Lägger en bild på ett kort. Samma endpoint för dropp och klistra-in —
+    frontend paketerar urklippets bilddata som en fil innan den skickar.
+    """
+    require_card_image_access(user_id)
+    card = load_owned_card(db, session_id, card_id, user_id)
+
+    # Vissa webbläsare skickar tom content-type vid drag & drop; filändelsen
+    # är då enda ledtråden.
+    media_type = (file.content_type or "").lower().split(";")[0].strip()
+    if not card_image_storage.extension_for_media_type(media_type):
+        media_type = card_image_storage.media_type_for_filename(file.filename or "") or ""
+    if not card_image_storage.extension_for_media_type(media_type):
+        raise HTTPException(
+            status_code=400,
+            detail="Image format not supported. Use PNG, JPG, GIF or WebP."
+        )
+
+    existing = load_card_images(db, [card.id]).get(str(card.id), [])
+    if len(existing) >= MAX_IMAGES_PER_CARD:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A card can hold at most {MAX_IMAGES_PER_CARD} images."
+        )
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="The image file was empty.")
+    if len(data) > card_image_storage.MAX_IMAGE_BYTES:
+        limit_mb = card_image_storage.MAX_IMAGE_BYTES // (1024 * 1024)
+        raise HTTPException(
+            status_code=413,
+            detail=f"Images must be smaller than {limit_mb} MB."
+        )
+
+    try:
+        path = await asyncio.to_thread(
+            card_image_storage.put_card_image,
+            user_id, str(card.session_id), str(card.id), media_type, data,
+        )
+    except Exception as e:
+        logging.exception("Card image upload failed")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not store the image: {str(e)}"
+        )
+
+    row = CardImageModel(
+        card_id=card.id,
+        storage_path=path,
+        position=(existing[-1].position + 1) if existing else 0,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+
+    signed = await asyncio.to_thread(
+        card_image_storage.sign_urls, [path], CARD_IMAGE_URL_TTL_SECONDS
+    )
+    return {
+        "id": str(row.id),
+        "url": signed.get(path),
+        "position": row.position,
+    }
+
+
+@app.delete("/api/cards/{session_id}/{card_id}/images/{image_id}")
+async def delete_card_image(
+    session_id: str,
+    card_id: str,
+    image_id: str,
+    user_id: str = Depends(get_user_id),
+    db: Session = Depends(get_db)
+):
+    """Tar bort en bild från kortet: DB-raden först, sedan filen."""
+    require_card_image_access(user_id)
+    card = load_owned_card(db, session_id, card_id, user_id)
+
+    row = db.query(CardImageModel).filter(
+        CardImageModel.id == parse_uuid(image_id, "Bild"),
+        CardImageModel.card_id == card.id,
+    ).first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Bild hittades inte")
+
+    # Raden bort först. En fil utan rad är osynlig och ofarlig; en rad utan fil
+    # ger en trasig miniatyr och en export som tyst tappar bilden.
+    path = row.storage_path
+    db.delete(row)
+    db.commit()
+
+    await asyncio.to_thread(card_image_storage.delete_card_image, path)
+    return {"ok": True}
 
 
 # ── /api/cards/{session_id}/{card_id}/content ─────────────────────────────────
@@ -1261,27 +1482,89 @@ async def export(
     if not cards:
         raise HTTPException(status_code=400, detail="Inga godkända kort att exportera")
 
-    cards_data = [
-        {
-            "text": c.text,
-            "extra": c.extra or "",
-            "tags": c.tags or "",
-            "deck": c.deck or "",
-            "logg": c.logg or "",
-            "bild": "",
-            "card_type": c.card_type or 'cloze'
-        }
-        for c in cards
-    ]
-
+    # Bilderna hämtas ur Storage och skrivs till en temporär mapp som genanki
+    # läser vid paketeringen. Mappen raderas så fort .apkg-filen är skriven.
+    images_by_card = load_card_images(db, [c.id for c in cards])
+    media_dir, media_files, bild_by_card = await collect_export_media(images_by_card)
     output_path = f"/tmp/dimindo_{session_id}.apkg"
-    export_to_apkg(cards_data, output_path)
+
+    try:
+        cards_data = [
+            {
+                "text": c.text,
+                "extra": c.extra or "",
+                "tags": c.tags or "",
+                "deck": c.deck or "",
+                "logg": c.logg or "",
+                "bild": bild_by_card.get(str(c.id), ""),
+                "card_type": c.card_type or 'cloze'
+            }
+            for c in cards
+        ]
+
+        await asyncio.to_thread(export_to_apkg, cards_data, output_path, media_files)
+    finally:
+        if media_dir:
+            shutil.rmtree(media_dir, ignore_errors=True)
 
     return FileResponse(
         path=output_path,
         filename="dimindo_export.apkg",
         media_type="application/octet-stream"
     )
+
+
+async def collect_export_media(
+    images_by_card: dict[str, list[CardImageModel]],
+) -> tuple[str | None, list[str], dict[str, str]]:
+    """
+    Materialiserar kortbilderna på disk inför paketeringen.
+
+    Returnerar (temporär mapp, filsökvägar till genanki, Bild-HTML per kort-id).
+
+    genanki lagrar mediefiler under enbart sitt basename, så namnen måste vara
+    unika i hela paketet. Namnet byggs därför av kortets id plus bildens
+    position — inte av originalfilnamnet, som skulle kollidera så fort två kort
+    fick var sin 'image.png' inklistrad. Samma kort exporterat två gånger ger
+    samma namn, vilket är önskvärt: Anki skriver då över med identiskt innehåll
+    i stället för att samla dubbletter i mediemappen.
+    """
+    if not any(images_by_card.values()):
+        return None, [], {}
+
+    # Namnen bestäms först, så nedladdningen kan skriva rakt till slutfilen.
+    filenames: dict[str, str] = {}
+    for card_id, images in images_by_card.items():
+        for index, img in enumerate(images):
+            ext = card_image_storage.extension_of(img.storage_path)
+            filenames[img.storage_path] = (
+                f"dimindo-{uuid.UUID(card_id).hex}-{index:02d}.{ext}"
+            )
+
+    media_dir = tempfile.mkdtemp(prefix="dimindo_media_")
+    fetched = await asyncio.to_thread(
+        card_image_storage.download_to_dir, filenames, media_dir
+    )
+
+    media_files: list[str] = []
+    bild_by_card: dict[str, str] = {}
+
+    for card_id, images in images_by_card.items():
+        tags: list[str] = []
+        for img in images:
+            if img.storage_path not in fetched:
+                # Bilden gick inte att läsa. Hellre ett kort utan den bilden
+                # än en export som fallerar helt.
+                logging.warning(f"[EXPORT] skipping unreadable image {img.storage_path}")
+                continue
+            filename = filenames[img.storage_path]
+            media_files.append(os.path.join(media_dir, filename))
+            tags.append(f'<img src="{filename}">')
+        if tags:
+            bild_by_card[card_id] = "".join(tags)
+
+    logging.info(f"[EXPORT] packaged {len(media_files)} card image(s)")
+    return media_dir, media_files, bild_by_card
 
 
 # ── /api/health ───────────────────────────────────────────────────────────────
