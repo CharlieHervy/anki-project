@@ -3,6 +3,7 @@ import random
 
 CLOZE_MODEL_ID = 1607392319
 BASIC_MODEL_ID = 1607392320
+VOCAB_MODEL_ID = 1607392321
 
 
 def create_cloze_model() -> genanki.Model:
@@ -215,6 +216,125 @@ def create_basic_model() -> genanki.Model:
     )
 
 
+def create_vocab_model() -> genanki.Model:
+    """
+    Dimindo_Vocab — glosor i Ankis "type in the answer"-format.
+
+    Egen notetyp, inte en variant av Dimindo_Basic: fältuppsättningen skiljer
+    (Image i stället för Logg) och mallen bygger på {{type:Back}}, som gör
+    kortet till ett skrivkort i stället för ett klicka-för-att-visa-kort.
+
+    INGET Logg-fält. Glosor granskas aldrig i efterhand mot källan, så det
+    finns ingen CORRECTED/EXTERNAL-märkning att bära.
+
+    Samma designtokens som Cloze/Basic (papper, vit kortbox, DM Serif Display),
+    men centrerad layout — ett gloskort är ett kort ord, inte löptext.
+
+    {{type:Back}} ligger på BÅDA sidorna, enligt Ankis standardmall: det är
+    förekomsten på framsidan som renderar själva inmatningsfältet. Ligger den
+    bara på baksidan får användaren inget att skriva i.
+
+    Stabilt model_id — ändra aldrig VOCAB_MODEL_ID när kort väl är ute.
+    """
+    css = """
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+
+/* ── Sidbakgrund — pappersfärg ─────────────────────────────── */
+.card {
+  background-color: #f7f5f0 !important;
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-size: 16px;
+  color: #0d0d0d;
+  padding: 24px 16px;
+  min-height: 100%;
+  box-sizing: border-box;
+}
+
+/* ── Kortbox — vit, kantad. Centrerad: ett gloskort är ett ord. ── */
+.dimindo-card {
+  background: #ffffff !important;
+  border: 1px solid #d8d3c8;
+  border-radius: 4px;
+  padding: 20px 22px;
+  max-width: 640px;
+  margin: 0 auto;
+  text-align: center;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: #0d0d0d;
+}
+
+/* ── Inmatningsfältet som {{type:Back}} renderar på framsidan ──
+   Anki ger fältet id="typeans". Rätt/fel-markeringen på baksidan är
+   Ankis egen rendering och styrs inte härifrån. */
+#typeans {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.95rem;
+  padding: 6px 10px;
+  margin-top: 14px;
+  border: 1px solid #d8d3c8;
+  border-radius: 3px;
+  background: #ffffff;
+  color: #0d0d0d;
+  outline: none;
+}
+#typeans:focus { border-color: #b8a06a; }
+
+/* ── Skiljelinjen mellan fråga och svar på baksidan ─────────── */
+hr#answer {
+  border: none;
+  border-top: 1px solid #ede9e1;
+  margin: 16px 0;
+}
+
+/* ── Bild ───────────────────────────────────────────────────── */
+.image-container {
+  margin-top: 16px;
+}
+
+.image-container img {
+  max-width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+  border-radius: 4px;
+}
+
+/* Flera bilder på samma kort staplas — utan detta ligger de kant i kant. */
+.image-container img + img {
+  margin-top: 10px;
+}
+"""
+
+    qfmt = '<div class="dimindo-card">{{Front}}<br>{{type:Back}}</div>'
+
+    afmt = """<div class="dimindo-card">{{Front}}
+<hr id=answer>
+{{type:Back}}
+{{#Image}}
+<div class="image-container">{{Image}}</div>
+{{/Image}}
+</div>"""
+
+    return genanki.Model(
+        VOCAB_MODEL_ID,
+        'Dimindo_Vocab',
+        fields=[
+            {'name': 'Front'},
+            {'name': 'Back'},
+            {'name': 'Image'},
+        ],
+        templates=[{
+            'name': 'Dimindo_Vocab',
+            'qfmt': qfmt,
+            'afmt': afmt,
+        }],
+        css=css,
+        model_type=genanki.Model.FRONT_BACK
+    )
+
+
 def export_to_apkg(
     cards: list[dict],
     output_path: str,
@@ -224,6 +344,11 @@ def export_to_apkg(
     Tar en lista av godkända kort och exporterar till .apkg-fil.
     Grupperar kort per kortlek (deck-fältet). Returnerar output_path.
 
+    card_type väljer notetyp: 'vocab' → Dimindo_Vocab, 'qa' → Dimindo_Basic,
+    allt annat → Dimindo_Cloze. Valet sker per kort, så ett paket med blandade
+    typer är giltigt — men en session innehåller i praktiken bara en typ,
+    eftersom varje genereringsväg har sin egen endpoint och skriver sin egen.
+
     media_files är absoluta sökvägar till bildfiler på disk. genanki läser dem
     vid write_to_file och lagrar dem i paketet under enbart sitt basename
     (Package.write_to_file: os.path.basename), så namnen MÅSTE vara unika över
@@ -232,6 +357,7 @@ def export_to_apkg(
     """
     cloze_model = create_cloze_model()
     basic_model = create_basic_model()
+    vocab_model = create_vocab_model()
 
     decks_dict: dict[str, genanki.Deck] = {}
     for card in cards:
@@ -240,7 +366,23 @@ def export_to_apkg(
             deck_id = random.randrange(1 << 30, 1 << 31)
             decks_dict[deck_name] = genanki.Deck(deck_id, deck_name)
 
-        if card.get('card_type') == 'qa':
+        if card.get('card_type') == 'vocab':
+            # Dimindo_Vocab har ett eget Image-fält, till skillnad från
+            # Dimindo_Basic: notetypen är ny, så det finns ingen befintlig
+            # installation vars schema en fältutökning skulle krocka med.
+            # Bildmarkupen kan därför ligga i sitt eget fält i stället för
+            # att bakas in i svaret — och måste göra det: Back matchas
+            # tecken för tecken mot det användaren skrivit.
+            note = genanki.Note(
+                model=vocab_model,
+                fields=[
+                    card.get('text', ''),
+                    card.get('extra', ''),
+                    card.get('bild', ''),
+                ],
+                tags=[card.get('tags', '')] if card.get('tags') else []
+            )
+        elif card.get('card_type') == 'qa':
             # Dimindo_Basic har medvetet INGET Bild-fält. Att lägga till ett
             # fält ändrar notetypens schema, och Anki matchar notetyper på
             # model_id vid import: en användare som redan har Dimindo_Basic i

@@ -5,6 +5,9 @@ import os
 
 client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 CLAUDE_MODEL = "claude-opus-4-8"
+# Glosgenereringen (längst ned i filen) kör en egen, billigare modell:
+# uppgiften är extraktion ur material som redan ligger framför modellen.
+VOCABULARY_MODEL = "claude-sonnet-5"
 logger = logging.getLogger(__name__)
 
 REVIEWER_PROMPT = """
@@ -1945,3 +1948,371 @@ def review_cards(
             logger.error(f"review_cards: could not parse index from {item}: {e}")
 
     return indices
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Glosgenerering — egen pipeline vid sidan av Master Prompt-flödet
+#
+# Detta är INTE en variant av kortgenereringen ovan. Uppgiften är regelbaserad
+# extraktion av ordpar ur en tabell eller lista, inte atomisering och syntes av
+# löptext. Egen systemprompt, egen modell, eget outputschema — och därför en
+# egen kodväg hela vägen ut till en egen endpoint.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Förkortningen som hamnar i frågans prefix: "(Fr, mask.) - min, mitt".
+# Bestäms här, inte av modellen: prefixet är ren formatering och ska vara
+# identiskt mellan körningar. Okänt språk faller tillbaka på två bokstäver.
+LANGUAGE_ABBREVIATIONS = {
+    "Arabic":     "Ar",
+    "Chinese":    "Zh",
+    "Danish":     "Da",
+    "Dutch":      "Nl",
+    "English":    "En",
+    "Finnish":    "Fi",
+    "French":     "Fr",
+    "German":     "De",
+    "Greek":      "Gr",
+    "Italian":    "It",
+    "Japanese":   "Ja",
+    "Latin":      "La",
+    "Norwegian":  "No",
+    "Polish":     "Pl",
+    "Portuguese": "Pt",
+    "Russian":    "Ru",
+    "Spanish":    "Es",
+    "Swedish":    "Sv",
+    "Turkish":    "Tr",
+}
+
+
+def abbreviate_language(language: str) -> str:
+    """"French" → "Fr". Okänt språk: första två bokstäverna, versal först."""
+    clean = (language or "").strip()
+    if not clean:
+        return "??"
+    return LANGUAGE_ABBREVIATIONS.get(clean, clean[:2].capitalize())
+
+
+# Modellen levererar delarna, inte den färdiga frågan: prefixformatet är en
+# regel vi äger, och en modell som bygger strängen själv gör det olika från
+# rad till rad. front sätts ihop i build_vocabulary_front().
+VOCABULARY_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {
+            "type": "string",
+            "description": (
+                "Short title for this set, in the source language, naming the "
+                "topic — e.g. 'Franska: possessiva pronomen'. Max 60 characters."
+            ),
+        },
+        "pairs": {
+            "type": "array",
+            "description": "One entry per card. Order follows the material.",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "source_phrase": {
+                        "type": "string",
+                        "description": (
+                            "The source-language phrase shown to the student. "
+                            "Includes every synonym listed for this form, "
+                            "verbatim and in the material's own order."
+                        ),
+                    },
+                    "target_form": {
+                        "type": "string",
+                        "description": (
+                            "The single target-language form the student types. "
+                            "One form only — never a list."
+                        ),
+                    },
+                    "gender": {
+                        "type": "string",
+                        "enum": ["masculine", "feminine", "none"],
+                        "description": (
+                            "'none' unless the material gives different target "
+                            "forms per gender for this meaning."
+                        ),
+                    },
+                },
+                "required": ["source_phrase", "target_form", "gender"],
+                "additionalProperties": False,
+            },
+        },
+        "skipped": {
+            "type": "array",
+            "description": (
+                "One short line per row left out because it could not be read "
+                "with confidence. Empty when nothing was skipped."
+            ),
+            "items": {"type": "string"},
+        },
+    },
+    "required": ["title", "pairs", "skipped"],
+    "additionalProperties": False,
+}
+
+
+VOCABULARY_PROMPT = """
+<role>
+
+You extract vocabulary pairs from study material and turn them into
+type-in-the-answer flashcards.
+
+You are not writing new material. Every card you produce must be traceable to a
+pair that is actually present in what you were given. You do not add words you
+know belong to the topic but cannot see, you do not correct the material, and
+you do not translate anything yourself.
+
+</role>
+
+<task>
+
+The material pairs [SOURCE_LANGUAGE] with [TARGET_LANGUAGE]. [SOURCE_LANGUAGE]
+is the language the student already knows; [TARGET_LANGUAGE] is the one being
+learned.
+
+Every card runs in one direction: the student sees the [SOURCE_LANGUAGE] phrase
+and types the [TARGET_LANGUAGE] form. Never the reverse. There are no cards
+that ask for the [SOURCE_LANGUAGE] word.
+
+</task>
+
+<reading_the_material>
+
+The material may be a table with columns, a numbered list, a two-column
+glossary, or running text with pairs embedded in it. Read it for what it means,
+not for its layout — there is no fixed column order you can rely on, and the
+[TARGET_LANGUAGE] column is not always the first one.
+
+Headings and grammatical labels ("singular", "plural", "masc.", "fem.",
+"det ägda", a chapter number) tell you how to read the rows. They are never
+vocabulary themselves and never become cards.
+
+</reading_the_material>
+
+<rules>
+
+1. ONE CARD PER FORM THAT HAS TO BE LEARNED SEPARATELY.
+
+   The unit is not the row and not the word — it is the form the student has to
+   be able to produce. A row that gives two different [TARGET_LANGUAGE] forms
+   yields two cards; a row that gives one yields one.
+
+2. SYNONYMS ON THE SOURCE SIDE STAY IN ONE CARD.
+
+   When several [SOURCE_LANGUAGE] words map to the same [TARGET_LANGUAGE] form,
+   they are one card, and source_phrase is the whole phrase exactly as the
+   material writes it — commas, slashes and word order included.
+
+   Swedish "min, mitt" → French "mon" is ONE card with source_phrase
+   "min, mitt", not two cards. Splitting it would ask the student to produce
+   the same answer twice and would teach that the forms are unrelated.
+
+3. GENDER ONLY WHEN THE FORMS ACTUALLY DIFFER.
+
+   Set gender to "masculine" or "feminine" only when the material gives
+   genuinely different [TARGET_LANGUAGE] forms for the same meaning:
+   "mon" vs "ma" are different, so that is two cards, one per gender.
+
+   When the form is identical across genders — "notre" and "notre" — it is ONE
+   card with gender "none". A gender label on a form that does not vary tells
+   the student to make a distinction that does not exist.
+
+   Judge this per row. The same table can have rows that split and rows that
+   do not.
+
+4. NO PLURAL LABEL.
+
+   Plural forms get their own cards, but nothing marks them as plural. The
+   [SOURCE_LANGUAGE] phrase already carries the number: "mina" is unambiguously
+   plural to someone who speaks it, and adding "(plural)" would be scaffolding
+   the student does not need.
+
+   For a plural row where the material lists one form covering both genders,
+   that is one card with gender "none".
+
+5. GIVE THE PARTS, NOT THE FINISHED QUESTION.
+
+   source_phrase is the bare [SOURCE_LANGUAGE] phrase. Do not add a language
+   prefix, a gender label, brackets or a dash — that formatting is applied
+   downstream and will be duplicated if you write it yourself.
+
+6. SKIP WHAT YOU CANNOT READ.
+
+   If a row is cut off, blurred, at an angle you cannot resolve, or ambiguous
+   about which forms pair with which, leave it out and record it in `skipped`.
+
+   Nothing downstream re-checks these cards against the source before they
+   reach the student. A guessed word becomes a wrong answer the student
+   practises until it is memorised, which is far more expensive than a missing
+   card they will notice immediately.
+
+</rules>
+
+<output>
+
+Return only the structured object. No commentary before or after it.
+
+If the material contains no [SOURCE_LANGUAGE]/[TARGET_LANGUAGE] pairs at all,
+return an empty `pairs` array rather than inventing entries.
+
+</output>
+"""
+
+
+VOCABULARY_IMAGE_NOTICE = (
+    "The material is provided as page images in the user message below. Read "
+    "them directly — there is no text transcription. Work from what you see: "
+    "column alignment, indentation and headings all carry meaning about which "
+    "forms pair with which."
+)
+
+
+def build_vocabulary_front(source_phrase: str, gender: str, target_abbrev: str) -> str:
+    """
+    "(Fr, mask.) - min, mitt" / "(Fr) - vår, vårt".
+
+    Formatet byggs här och inte av modellen, så att det är identiskt över alla
+    kort och alla körningar.
+    """
+    label = {"masculine": ", mask.", "feminine": ", fem."}.get(gender, "")
+    return f"({target_abbrev}{label}) - {source_phrase}"
+
+
+def generate_vocabulary(
+    source_language: str,
+    target_language: str,
+    source_material: str = "",
+    source_images: list[tuple[str, bytes]] | None = None,
+) -> dict:
+    """
+    Extraherar ordpar och returnerar {"title": str, "cards": [...],
+    "skipped": [...]}.
+
+    Korten är färdiga att skriva till cards-tabellen: text = frågan,
+    extra = svaret, card_type = 'vocab'.
+
+    Bild och text går samma väg — samma modell, samma systemprompt, samma
+    schema. Enda skillnaden är om materialet ligger som bildblock eller som
+    text i anropet.
+
+    Ingen thinking: uppgiften är regelbaserad extraktion ur material som ligger
+    framför modellen, inte flerstegsresonemang. Outputschemat gör svaret
+    maskinläsbart utan efterparsning, så det finns inget format att tänka ut.
+    """
+    static_prompt = (
+        VOCABULARY_PROMPT
+        .replace("[SOURCE_LANGUAGE]", source_language)
+        .replace("[TARGET_LANGUAGE]", target_language)
+    )
+
+    instruction = (
+        f"Extract the {source_language} → {target_language} vocabulary pairs "
+        "from the material and return the structured object."
+    )
+
+    if source_images:
+        dynamic_block = VOCABULARY_IMAGE_NOTICE
+        # Bilderna först, instruktionen sist — modellen ska ha sett hela
+        # materialet innan den läser vad den ska göra med det.
+        user_content = build_image_blocks(source_images) + [
+            {"type": "text", "text": instruction}
+        ]
+    else:
+        dynamic_block = f"Material:\n{source_material}"
+        user_content = instruction
+
+    response = client.beta.messages.create(
+        model=VOCABULARY_MODEL,
+        max_tokens=16000,
+        thinking={"type": "disabled"},
+        output_config={
+            "effort": "medium",
+            "format": {"type": "json_schema", "schema": VOCABULARY_SCHEMA},
+        },
+        system=[
+            {
+                "type": "text",
+                "text": static_prompt,
+                "cache_control": {"type": "ephemeral"}   # ← cachas per språkpar
+            },
+            {
+                "type": "text",
+                "text": dynamic_block                    # ← ej cachat, unikt per anrop
+            }
+        ],
+        messages=[{
+            "role": "user",
+            "content": user_content
+        }],
+        betas=["prompt-caching-2024-07-31"]
+    )
+
+    usage = response.usage
+    logger.info(
+        f"[VOCAB] mode={'images' if source_images else 'text'} "
+        f"pages={len(source_images) if source_images else 0} "
+        f"{source_language}->{target_language} "
+        f"input={usage.input_tokens} "
+        f"output={usage.output_tokens} "
+        f"cache_creation={getattr(usage, 'cache_creation_input_tokens', 0)} "
+        f"cache_read={getattr(usage, 'cache_read_input_tokens', 0)}"
+    )
+
+    if getattr(response, "stop_reason", None) == "max_tokens":
+        # Med schema är svaret ogiltig JSON om det trunkeras — bättre att säga
+        # det rakt ut än att låta json.loads kasta ett obegripligt fel.
+        raise ValueError(
+            "The material produced more cards than fit in one response. "
+            "Split it into smaller parts and try again."
+        )
+
+    text_content = "".join(
+        block.text for block in response.content
+        if getattr(block, "type", "") == "text"
+    )
+    if not text_content.strip():
+        raise ValueError("The model returned no output.")
+
+    # output_config.format garanterar giltig JSON mot schemat. Vi parsar ändå
+    # defensivt: ett schemabrott ska bli ett läsbart fel, inte en 500.
+    try:
+        result = json.loads(text_content)
+    except json.JSONDecodeError as e:
+        logger.error(f"generate_vocabulary: invalid JSON: {e} — raw: {text_content[:200]}")
+        raise ValueError("The model returned a malformed response.")
+
+    target_abbrev = abbreviate_language(target_language)
+    skipped = [s for s in result.get("skipped", []) if isinstance(s, str)]
+
+    cards: list[dict] = []
+    for pair in result.get("pairs", []):
+        source_phrase = (pair.get("source_phrase") or "").strip()
+        target_form = (pair.get("target_form") or "").strip()
+        if not source_phrase or not target_form:
+            # Ett halvt par är inget kort. Räknas som överhoppat så att
+            # antalet i loggen stämmer med vad användaren ser.
+            skipped.append(f"Incomplete pair: {source_phrase or '?'} / {target_form or '?'}")
+            continue
+        cards.append({
+            "text":      build_vocabulary_front(
+                source_phrase, pair.get("gender", "none"), target_abbrev
+            ),
+            "extra":     target_form,
+            "tags":      "",
+            "deck":      "",
+            "logg":      "",          # Dimindo_Vocab har inget Logg-fält
+            "card_type": "vocab",
+            "approved":  True,
+        })
+
+    for line in skipped:
+        logger.info(f"[VOCAB] skipped: {line}")
+
+    return {
+        "title":   (result.get("title") or "").strip(),
+        "cards":   cards,
+        "skipped": skipped,
+    }

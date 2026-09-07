@@ -39,9 +39,26 @@ type Card = {
   deck: string
   logg: string
   approved: boolean
-  card_type: 'cloze' | 'qa'
+  // 'vocab' = glossary card (Dimindo_Vocab, type-in-the-answer). It carries no
+  // log field — glossary cards are never marked CORRECTED/EXTERNAL.
+  card_type: 'cloze' | 'qa' | 'vocab'
   images?: CardImage[]
 }
+
+// Glossary mode. Standard is the default on every page load — the mode is
+// deliberately not remembered between sessions, so glossary is always a
+// conscious choice.
+type GenerationMode = 'standard' | 'glossary'
+
+// Free list, not a fixed pair: any language can be source or target. Mirrors
+// generator.LANGUAGE_ABBREVIATIONS server-side, which turns the name into the
+// "(Fr)" prefix on the card front. A language missing there still works — the
+// backend falls back to the first two letters.
+const LANGUAGES = [
+  'Arabic', 'Chinese', 'Danish', 'Dutch', 'English', 'Finnish', 'French',
+  'German', 'Greek', 'Italian', 'Japanese', 'Latin', 'Norwegian', 'Polish',
+  'Portuguese', 'Russian', 'Spanish', 'Swedish', 'Turkish',
+]
 
 // Speglar backendens card_image_storage.EXTENSION_BY_MEDIA_TYPE. Kontrollen
 // här är bara för att slippa en round-trip på en uppenbart fel fil — servern
@@ -199,6 +216,15 @@ export default function Home() {
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const [language, setLanguage] = useState('English')
+  // Glosläget: alltid 'standard' vid sidladdning. Ingen localStorage, ingen
+  // URL-parameter — läget måste väljas om varje gång.
+  const [mode, setMode] = useState<GenerationMode>('standard')
+  const [sourceLanguage, setSourceLanguage] = useState('Swedish')
+  const [targetLanguage, setTargetLanguage] = useState('French')
+  // Rader extraktionen hoppade över för att de inte gick att läsa säkert.
+  // Visas i granskningsvyn: det finns inget granskningssteg som fångar dem,
+  // så användaren är den enda som kan upptäcka att materialet inte gick igenom helt.
+  const [skippedRows, setSkippedRows] = useState<string[]>([])
   const [quota, setQuota] = useState<Quota | null>(null)
   const [quotaExceeded, setQuotaExceeded] = useState(false)
   const [quotaExceededReason, setQuotaExceededReason] = useState<
@@ -425,6 +451,13 @@ export default function Home() {
       return
     }
 
+    // Glosläget är en egen pipeline hela vägen: egen endpoint, ingen kvot,
+    // inget strömmande. Den delar inga av gaterna nedan.
+    if (mode === 'glossary') {
+      await runVocabularyGeneration()
+      return
+    }
+
     // One-time educational modal — first time a Pro user generates with text
     // over 3,000 words (i.e. an upload that costs 2 or 3 pool generations).
     // Once seen, the localStorage flag suppresses it for good, on any device
@@ -532,6 +565,68 @@ export default function Home() {
       setError('Something went wrong. Make sure the backend is running.')
       setState('upload')
       console.error(err)
+    }
+  }
+
+  // --- Glossary generation ---
+  // No SSE: the extraction returns a structured result in one piece, so there
+  // is nothing to stream card by card. The generating view shows the timer and
+  // then the review view opens with the finished set.
+  async function runVocabularyGeneration() {
+    setState('generating')
+    setStreamCards([])
+    setStreamDone(false)
+    setIsReviewing(false)
+    setQuotaExceeded(false)
+    setSkippedRows([])
+    setError('')
+    startTimer()
+
+    const formData = new FormData()
+    formData.append('source_material', attachment ? '' : sourceText)
+    formData.append('upload_id', attachment?.uploadId ?? '')
+    formData.append('source_language', sourceLanguage)
+    formData.append('target_language', targetLanguage)
+
+    try {
+      const res = await fetch(`${API}/api/generate-vocabulary`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: formData,
+      })
+      const data = await res.json().catch(() => null)
+      stopTimer()
+
+      if (!res.ok) {
+        setError(data?.detail || "We couldn't read any word pairs from that material.")
+        setState('upload')
+        return
+      }
+
+      setSessionId(data.session_id)
+      setSkippedRows(Array.isArray(data.skipped) ? data.skipped : [])
+
+      const cardsRes = await fetch(`${API}/api/cards/${data.session_id}`, {
+        headers: authHeaders,
+      })
+      const cardsData = await cardsRes.json()
+      setCards(cardsData.cards)
+      // Fyll strömvyn först, sätt sedan streamDone: annars visar rubriken
+      // "DONE — 0 CARDS GENERATED" i ögonblicket innan korten kommer.
+      setStreamCards(cardsData.cards ?? [])
+      setStreamDone(true)
+      setImagesEnabled(cardsData.images_enabled === true)
+      // Källmaterialet i bildläge är en platshållartext, inte sidorna — samma
+      // som i standardflödet. Chatten läser sidorna server-side via session_id.
+      fetch(`${API}/api/sessions/${data.session_id}/source`, { headers: authHeaders })
+        .then(r => r.json())
+        .then(src => setSourceMaterial(src.source_material ?? null))
+        .catch(() => {})
+      setTimeout(() => setState('review'), 400)
+    } catch {
+      stopTimer()
+      setError('Something went wrong. Make sure the backend is running.')
+      setState('upload')
     }
   }
 
@@ -824,6 +919,10 @@ export default function Home() {
   function handleNewDeck() {
     setState('upload')
     setSourceText('')
+    // Glosläget nollställs med resten: det ska aldrig hänga kvar mellan kortlekar.
+    setMode('standard')
+    setSkippedRows([])
+    setAttachment(null)
     setCards([])
     setStreamCards([])
     setQuotaExceeded(false)
@@ -1055,6 +1154,41 @@ export default function Home() {
 
             <h1 className={styles.heading}>Upload your source material</h1>
 
+            {/* Mode switch — Standard is selected on every page load. Glossary
+                is a separate pipeline (different model, prompt and note type),
+                so it changes what the whole view produces, not just a setting
+                inside it. Hidden while generating: switching mid-run would
+                misdescribe what is being made. */}
+            {state === 'upload' && (
+              <div className={styles.modeToggle} role="group" aria-label="Generation mode">
+                <button
+                  type="button"
+                  onClick={() => setMode('standard')}
+                  aria-pressed={mode === 'standard'}
+                  className={[styles.modeBtn, mode === 'standard' ? styles.modeBtnActive : '']
+                    .filter(Boolean)
+                    .join(' ')}
+                >
+                  Standard
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('glossary')}
+                  aria-pressed={mode === 'glossary'}
+                  className={[styles.modeBtn, mode === 'glossary' ? styles.modeBtnActive : '']
+                    .filter(Boolean)
+                    .join(' ')}
+                >
+                  Glossary
+                </button>
+                <span className={styles.modeHint}>
+                  {mode === 'glossary'
+                    ? 'Word pairs become type-in-the-answer cards'
+                    : 'Full cards from your source material'}
+                </span>
+              </div>
+            )}
+
             {/* P3 — error banner anchored directly above the textarea that caused it */}
             {error && (
               <div className={styles.error}>
@@ -1125,7 +1259,11 @@ export default function Home() {
               ) : (
                 <textarea
                   className={styles.textarea}
-                  placeholder="Paste your source material here — or drop a .txt, .pdf, or image file…"
+                  placeholder={
+                    mode === 'glossary'
+                      ? 'Paste a word list here — or drop a photo of a textbook table…'
+                      : 'Paste your source material here — or drop a .txt, .pdf, or image file…'
+                  }
                   value={sourceText}
                   onChange={e => setSourceText(e.target.value)}
                   disabled={state === 'generating' || isUploading}
@@ -1144,7 +1282,7 @@ export default function Home() {
             {/* Counter stack — generation cost (Pro, top) · count/limit · QR
                 suffix (bottom). While quota is still loading we show a neutral
                 placeholder so a wrong limit never flashes in. */}
-            {state === 'upload' && user && wordCount > 0 && (
+            {state === 'upload' && mode === 'standard' && user && wordCount > 0 && (
               <div className={styles.counterStack}>
                 {generationCostDisplay() && (
                   <p className={styles.counterMeta}>{generationCostDisplay()}</p>
@@ -1167,7 +1305,7 @@ export default function Home() {
               </div>
             )}
 
-            {state === 'upload' && (
+            {state === 'upload' && mode === 'standard' && (
               <div className={styles.settingsRow}>
                 <label htmlFor="lang-select" className={styles.settingsLabel}>
                   Output language:
@@ -1184,6 +1322,50 @@ export default function Home() {
                   <option value="French">🇫🇷 French</option>
                   <option value="Spanish">🇪🇸 Spanish</option>
                 </select>
+              </div>
+            )}
+
+            {/* Glossary: the pair of languages replaces the output-language
+                setting — cards are always source → target, one direction. */}
+            {state === 'upload' && mode === 'glossary' && (
+              <div className={styles.settingsRow}>
+                <div className={styles.langPair}>
+                  <div className={styles.langPairField}>
+                    <label htmlFor="source-lang" className={styles.settingsLabel}>
+                      Source language
+                    </label>
+                    <select
+                      id="source-lang"
+                      className={styles.langSelect}
+                      value={sourceLanguage}
+                      onChange={e => setSourceLanguage(e.target.value)}
+                    >
+                      {LANGUAGES.map(l => (
+                        <option key={l} value={l}>{l}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <span className={styles.langPairArrow} aria-hidden="true">→</span>
+                  <div className={styles.langPairField}>
+                    <label htmlFor="target-lang" className={styles.settingsLabel}>
+                      Target language
+                    </label>
+                    <select
+                      id="target-lang"
+                      className={styles.langSelect}
+                      value={targetLanguage}
+                      onChange={e => setTargetLanguage(e.target.value)}
+                    >
+                      {LANGUAGES.map(l => (
+                        <option key={l} value={l}>{l}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                <p className={styles.counterMeta}>
+                  You are shown the {sourceLanguage} word and type the{' '}
+                  {targetLanguage} one.
+                </p>
               </div>
             )}
 
@@ -1208,18 +1390,30 @@ export default function Home() {
                   (!sourceText.trim() && !attachment) ||
                   state === 'generating' ||
                   isUploading ||
-                  (!attachment && wordLimitExceeded)
+                  // Ordtaket hör till kvotsystemet, som glosläget inte rör.
+                  (mode === 'standard' && !attachment && wordLimitExceeded) ||
+                  (mode === 'glossary' && sourceLanguage === targetLanguage)
                 }
                 className={[styles.btnPrimary, generateIdle ? styles.btnPrimaryIdle : '']
                   .filter(Boolean)
                   .join(' ')}
               >
-                {state === 'generating' ? 'Generating…' : 'Generate cards →'}
+                {state === 'generating'
+                  ? 'Generating…'
+                  : mode === 'glossary'
+                    ? 'Extract glossary →'
+                    : 'Generate cards →'}
               </button>
             </div>
 
+            {state === 'upload' && mode === 'glossary' && sourceLanguage === targetLanguage && (
+              <p className={styles.limitNotice}>
+                Pick two different languages to continue.
+              </p>
+            )}
+
             {/* P2 — explicit reason the Generate button is disabled when over the limit */}
-            {state === 'upload' && wordLimitExceeded && (
+            {state === 'upload' && mode === 'standard' && wordLimitExceeded && (
               <p className={styles.limitNotice}>
                 {wordLimitOver.toLocaleString('en-US')} word
                 {wordLimitOver !== 1 ? 's' : ''} over the limit — shorten your text to continue.
@@ -1329,6 +1523,23 @@ export default function Home() {
               </div>
             )}
 
+            {/* Överhoppade rader. Ingen granskare kontrollerar glosorna mot
+                källan, så det här är enda stället användaren får veta att
+                materialet inte gick igenom helt. */}
+            {skippedRows.length > 0 && (
+              <div className={styles.skippedNotice}>
+                <p className={styles.skippedTitle}>
+                  {skippedRows.length} row{skippedRows.length !== 1 ? 's' : ''} skipped —
+                  couldn&apos;t be read with confidence. Add {skippedRows.length !== 1 ? 'them' : 'it'} by hand if you need {skippedRows.length !== 1 ? 'them' : 'it'}.
+                </p>
+                <ul className={styles.skippedList}>
+                  {skippedRows.map((row, i) => (
+                    <li key={i}>{row}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             <div className={styles.cardsList}>
               {cards.map((card, i) => {
                 const logg = loggDisplay(card.logg)
@@ -1383,7 +1594,11 @@ export default function Home() {
                       <div className={styles.editForm}>
                         <div className={styles.fieldGroup}>
                           <label className={styles.fieldLabel}>
-                            {card.card_type === 'qa' ? 'Question' : 'Cloze text'}
+                            {card.card_type === 'vocab'
+                              ? 'Prompt'
+                              : card.card_type === 'qa'
+                                ? 'Question'
+                                : 'Cloze text'}
                           </label>
                           <textarea
                             className={styles.fieldTextarea}
@@ -1396,7 +1611,11 @@ export default function Home() {
                         </div>
                         <div className={styles.fieldGroup}>
                           <label className={styles.fieldLabel}>
-                            {card.card_type === 'qa' ? 'Answer' : 'Back extra'}
+                            {card.card_type === 'vocab'
+                              ? 'Answer — typed exactly as written'
+                              : card.card_type === 'qa'
+                                ? 'Answer'
+                                : 'Back extra'}
                           </label>
                           <textarea
                             className={styles.fieldTextarea}
@@ -1439,7 +1658,27 @@ export default function Home() {
                           </button>
                         </div>
 
-                        {card.card_type === 'qa' ? (
+                        {card.card_type === 'vocab' ? (
+                          /* Glossary — same two-box shape as Q&A. The prompt
+                             already carries its own "(Fr, mask.)" prefix, so it
+                             renders bare; the answer is labelled because it is
+                             what the student types character by character. */
+                          showPanel && (
+                            <div
+                              className={`${styles.qaPanel} ${styles.cardPanelEditable}`}
+                              onClick={() => startEditing(i)}
+                            >
+                              <div className={styles.qaQuestion}>
+                                <p className={styles.cardTextContent}>{card.text}</p>
+                              </div>
+                              <div className={styles.qaAnswer}>
+                                <p className={styles.cardTextContent}>
+                                  <span className={styles.qaPrefix}>Type ·</span> {card.extra}
+                                </p>
+                              </div>
+                            </div>
+                          )
+                        ) : card.card_type === 'qa' ? (
                           /* Q&A — two separate white boxes (question / answer)
                              split by a 2px beige gap. Clickable-to-edit like the
                              cloze panel. */

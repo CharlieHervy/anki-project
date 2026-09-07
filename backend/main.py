@@ -19,7 +19,13 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, Response
 from sqlalchemy.orm import Session
-from generator import generate_cards_stream, parse_tsv, review_cards, build_image_blocks
+from generator import (
+    generate_cards_stream,
+    generate_vocabulary,
+    parse_tsv,
+    review_cards,
+    build_image_blocks,
+)
 from exporter import export_to_apkg
 from database import get_db, SessionModel, CardModel, CardImageModel, DemoCard
 import storage
@@ -399,6 +405,117 @@ async def generate(
             "X-Accel-Buffering": "no",
         }
     )
+
+
+# ── /api/generate-vocabulary ─────────────────────────────────────────────────
+#
+# Parallell kodväg till /api/generate, inte en gren inuti den: uppgiften
+# (regelbaserad extraktion av ordpar), modellen, systemprompten och
+# outputschemat skiljer sig helt. Det enda de delar är upplösningen av
+# källmaterialet — resolve_source() vet ingenting om Master Prompt-flödet och
+# återanvänds oförändrad.
+#
+# Ingen SSE: extraktionen ger ett strukturerat svar på en gång, det finns inga
+# kort att strömma fram ett i taget. Klienten får hela listan när den är klar.
+
+@app.post("/api/generate-vocabulary")
+async def generate_vocabulary_endpoint(
+    source_material: str = Form(default=""),
+    upload_id: str = Form(default=""),
+    source_language: str = Form(...),
+    target_language: str = Form(...),
+    x_user_id: str = Header(...),
+    db: Session = Depends(get_db)
+):
+    require_vocabulary_access(x_user_id)
+
+    source_language = source_language.strip()
+    target_language = target_language.strip()
+    if not source_language or not target_language:
+        raise HTTPException(status_code=400, detail="Pick a source and a target language.")
+    if source_language.lower() == target_language.lower():
+        raise HTTPException(
+            status_code=400,
+            detail="Source and target language must be different."
+        )
+
+    # Samma upplösningspunkt som /api/generate. upload_id är en referens till
+    # serverlagrad data och ägarkontrolleras här, vid användningen.
+    src = await asyncio.to_thread(
+        resolve_source, source_material, upload_id, "", x_user_id
+    )
+    if not src.is_images and not src.text.strip():
+        raise HTTPException(status_code=400, detail="No source material provided.")
+
+    # Ingen kvotkontroll: vägen är admin-gatead och admin förbrukar inget idag.
+    db_session = SessionModel(user_id=x_user_id, source_material=src.text)
+    db.add(db_session)
+    db.commit()
+    db.refresh(db_session)
+    session_id = str(db_session.id)
+
+    # Bildläge: flytta sidorna till den permanenta sessions-sökvägen, så att de
+    # inte sveps bort med staging och så att granskningsvyns chatt hittar dem.
+    if src.is_images:
+        try:
+            moved = await asyncio.to_thread(
+                storage.promote_staging_to_session, upload_id, x_user_id, session_id
+            )
+            logging.info(f"[VOCAB] promoted {moved} page(s) to session {session_id}")
+        except Exception:
+            logging.exception("Promoting staged pages to session storage failed")
+
+    try:
+        result = await asyncio.to_thread(
+            generate_vocabulary,
+            source_language, target_language, src.text, src.images
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except Exception as e:
+        logging.exception("Vocabulary extraction failed")
+        raise HTTPException(status_code=502, detail=f"Extraction failed: {str(e)}")
+
+    cards = result["cards"]
+    if not cards:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "We couldn't find any word pairs in that material. Check that "
+                "both languages are present and that the picture is readable."
+            )
+        )
+
+    try:
+        if result["title"]:
+            db_session.title = result["title"][:120]
+        for i, card in enumerate(cards):
+            db.add(CardModel(
+                session_id=db_session.id,
+                user_id=x_user_id,
+                position=i,
+                text=card["text"],
+                extra=card["extra"],
+                tags=card["tags"],
+                deck=card["deck"],
+                logg=card["logg"],
+                card_type=card["card_type"],
+                approved=True,
+            ))
+        db.commit()
+    except Exception as db_error:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Databasfel: {str(db_error)}")
+
+    logging.info(f"[VOCAB] session {session_id}: {len(cards)} card(s), {len(result['skipped'])} skipped")
+
+    return {
+        "session_id": session_id,
+        "card_count": len(cards),
+        # Överhoppade rader är inget fel, men användaren ska veta att materialet
+        # inte gick igenom helt — det finns inget granskningssteg som fångar det.
+        "skipped":    result["skipped"],
+    }
 
 
 # ── /api/quota ────────────────────────────────────────────────────────────────
@@ -914,6 +1031,25 @@ def require_card_image_access(user_id: str) -> None:
     """Tunn behörighetskontroll — enda stället där kortbilder är plan-beroende."""
     if lookup_plan(user_id) != "admin":
         raise HTTPException(status_code=403, detail=CARD_IMAGE_GATED_MESSAGE)
+
+
+# ── Glosgenerering ───────────────────────────────────────────────────────────
+#
+# Samma uppdelning igen: extraktionen, lagringen och exporten är plan-agnostiska.
+# Hela behörighetsskillnaden ligger i require_vocabulary_access(), som anropas
+# på ett ställe. Tas den raden bort blir funktionen publik utan att något annat
+# skrivs om — men då behöver kvotlogik läggas till, som idag inte finns för
+# den här vägen (admin förbrukar ingenting).
+
+VOCABULARY_GATED_MESSAGE = (
+    "Glossary mode isn't available yet — this feature is in testing"
+)
+
+
+def require_vocabulary_access(user_id: str) -> None:
+    """Tunn behörighetskontroll — enda stället där glosläget är plan-beroende."""
+    if lookup_plan(user_id) != "admin":
+        raise HTTPException(status_code=403, detail=VOCABULARY_GATED_MESSAGE)
 
 
 def parse_uuid(value: str, what: str) -> uuid.UUID:

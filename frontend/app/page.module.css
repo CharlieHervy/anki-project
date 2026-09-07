@@ -419,6 +419,70 @@
 .langSelect:focus { border-color: var(--ink); }
 
 /* ─────────────────────────────────────────────
+   Mode toggle — Standard / Glossary
+   Segmented control above the dropzone. Standard is preselected on every page
+   load: the mode is never persisted, so the control always starts on the left.
+───────────────────────────────────────────── */
+.modeToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.modeBtn {
+  padding: 6px 14px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.modeBtn:hover { border-color: var(--ink); color: var(--ink); }
+
+.modeBtnActive {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+.modeBtnActive:hover { color: var(--paper); }
+
+.modeHint {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.78rem;
+  font-weight: 300;
+  color: var(--muted);
+}
+
+/* Language pair — source → target. One direction only, so the arrow is not
+   decorative: it states which way the cards run. */
+.langPair {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.langPairField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.langPairArrow {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.9rem;
+  color: var(--muted);
+  padding-bottom: 7px;
+}
+
+/* ─────────────────────────────────────────────
    Button row
 ───────────────────────────────────────────── */
 .buttonRow {
@@ -1713,3 +1777,32 @@
   transition: background 0.15s, transform 0.1s;
 }
 .modalBtnSolid:hover { background: #333; transform: translateY(-1px); }
+/* ─────────────────────────────────────────────
+   Skipped rows (glossary)
+   Rader extraktionen inte kunde läsa säkert. Ingen granskare kontrollerar
+   glosorna mot källan, så det här är enda stället användaren får veta att
+   materialet inte gick igenom helt — därför guldkanten, inte muted text.
+───────────────────────────────────────────── */
+.skippedNotice {
+  background: white;
+  border: 1px solid var(--rule);
+  border-left: 2px solid var(--gold);
+  border-radius: 3px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.skippedTitle {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.skippedList {
+  margin: 6px 0 0 18px;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  color: var(--muted);
+}
