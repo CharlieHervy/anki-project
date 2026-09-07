@@ -496,6 +496,7 @@ async def generate_vocabulary_endpoint(
                 position=i,
                 text=card["text"],
                 extra=card["extra"],
+                example=card["example"],
                 tags=card["tags"],
                 deck=card["deck"],
                 logg=card["logg"],
@@ -1442,6 +1443,9 @@ async def get_cards(
             {
                 "text": c.text,
                 "extra": c.extra,
+                # Bara glosortkort har en exempelmening. Tom sträng i stället
+                # för null så att frontend slipper en null-gren per kort.
+                "example": c.example or "",
                 "tags": c.tags,
                 "deck": c.deck,
                 "logg": c.logg,
@@ -1591,6 +1595,8 @@ async def update_card_content(
         card.text = body["text"]
     if "extra" in body:
         card.extra = body["extra"]
+    if "example" in body:
+        card.example = body["example"]
     if "deck" in body:
         card.deck = body["deck"]
     if "approved" in body:
@@ -1629,6 +1635,7 @@ async def export(
             {
                 "text": c.text,
                 "extra": c.extra or "",
+                "example": c.example or "",
                 "tags": c.tags or "",
                 "deck": c.deck or "",
                 "logg": c.logg or "",

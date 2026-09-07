@@ -1806,3 +1806,29 @@
   line-height: 1.6;
   color: var(--muted);
 }
+
+/* ─────────────────────────────────────────────
+   Exempelmening på glosortkort
+   Tredje vita rutan i vocab-panelen, under svaret. Kursiv serif — samma
+   behandling som .example-sentence på Anki-kortets baksida, så att
+   granskningsvyn visar det man faktiskt exporterar.
+───────────────────────────────────────────── */
+.vocabExample {
+  background: white;
+  border-radius: 0 0 4px 4px;
+  padding: 12px 16px;
+}
+
+.vocabExampleText {
+  font-family: 'DM Serif Display', serif;
+  font-style: italic;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--ink);
+}
+
+/* Svarsrutan äger den nedre rundningen bara när den är sist i panelen.
+   På ett gloskort med exempelmening flyttas den till rutan under. */
+.qaPanel .qaAnswer:not(:last-child) {
+  border-radius: 0;
+}

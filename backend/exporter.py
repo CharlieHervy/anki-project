@@ -287,6 +287,24 @@ hr#answer {
   margin: 16px 0;
 }
 
+/* ── Exempelmening ──────────────────────────────────────────
+   Samma roll som .extra-text i Cloze/Basic: stödtext på baksidan, avdelad
+   med en hårfin linje i samma cream-ton som hr#answer. Kursivt eftersom
+   meningen till största delen är målspråk — normal sättning för citerat
+   främmande språk. Ingen citattecken: strängen slutar med den svenska
+   översättningen inom parentes, och ett avslutande citattecken efter den
+   parentesen skulle påstå att översättningen också är citerad. */
+.example-sentence {
+  font-family: 'DM Serif Display', Georgia, serif;
+  font-style: italic;
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: #0d0d0d;
+  border-top: 1px solid #ede9e1;
+  padding-top: 14px;
+  margin-top: 16px;
+}
+
 /* ── Bild ───────────────────────────────────────────────────── */
 .image-container {
   margin-top: 16px;
@@ -307,11 +325,16 @@ hr#answer {
 }
 """
 
+    # Framsidan rör aldrig Example: meningen innehåller svaret, och att visa
+    # den innan man svarat vore att lämna ut facit.
     qfmt = '<div class="dimindo-card">{{Front}}<br>{{type:Back}}</div>'
 
     afmt = """<div class="dimindo-card">{{Front}}
 <hr id=answer>
 {{type:Back}}
+{{#Example}}
+<div class="example-sentence">{{Example}}</div>
+{{/Example}}
 {{#Image}}
 <div class="image-container">{{Image}}</div>
 {{/Image}}
@@ -324,6 +347,11 @@ hr#answer {
             {'name': 'Front'},
             {'name': 'Back'},
             {'name': 'Image'},
+            # Example ligger sist: fältordningen är en del av notetypens schema,
+            # och ett nytt fält på slutet är den enda tilläggsformen som inte
+            # flyttar befintliga fält. Ofarligt just nu — notetypen har aldrig
+            # importerats någonstans — men vanan är värd att hålla.
+            {'name': 'Example'},
         ],
         templates=[{
             'name': 'Dimindo_Vocab',
@@ -379,6 +407,7 @@ def export_to_apkg(
                     card.get('text', ''),
                     card.get('extra', ''),
                     card.get('bild', ''),
+                    card.get('example', ''),
                 ],
                 tags=[card.get('tags', '')] if card.get('tags') else []
             )

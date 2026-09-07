@@ -35,6 +35,8 @@ type Card = {
   id: string
   text: string
   extra: string
+  // Exempelmening, tom sträng för cloze- och qa-kort.
+  example: string
   tags: string
   deck: string
   logg: string
@@ -212,6 +214,7 @@ export default function Home() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
   const [editText, setEditText] = useState('')
   const [editExtra, setEditExtra] = useState('')
+  const [editExample, setEditExample] = useState('')
   const [deckName, setDeckName] = useState('')
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -522,7 +525,7 @@ export default function Home() {
               currentSessionId = event.session_id
               setSessionId(currentSessionId)
             } else if (event.type === 'card') {
-              setStreamCards(prev => [...prev, { ...event.data, approved: true, tags: '', deck: '', card_type: event.data.card_type ?? 'cloze' }])
+              setStreamCards(prev => [...prev, { ...event.data, approved: true, tags: '', deck: '', example: '', card_type: event.data.card_type ?? 'cloze' }])
             } else if (event.type === 'reviewing') {
                 setIsReviewing(true)
             } else if (event.type === 'done') {
@@ -708,21 +711,28 @@ export default function Home() {
     setEditingIndex(index)
     setEditText(cards[index].text)
     setEditExtra(cards[index].extra)
+    setEditExample(cards[index].example ?? '')
   }
 
   async function saveEdit(index: number) {
+    const card = cards[index]
+    const isVocab = card.card_type === 'vocab'
     const updated = [...cards]
     updated[index].text = editText
     updated[index].extra = editExtra
+    if (isVocab) updated[index].example = editExample
     setCards(updated)
     setEditingIndex(null)
 
-    await fetch(`${API}/api/cards/${sessionId}/${cards[index].id}/content`, {
+    await fetch(`${API}/api/cards/${sessionId}/${card.id}/content`, {
       method: 'PATCH',
       headers: { ...authHeaders, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         text: editText,
         extra: editExtra,
+        // Bara för glosortkort: PATCH:en är partiell, så att utelämna nyckeln
+        // lämnar kolumnen orörd för cloze och qa i stället för att nolla den.
+        ...(isVocab ? { example: editExample } : {}),
       }),
     })
   }
@@ -1625,6 +1635,20 @@ export default function Home() {
                             onChange={e => { setEditExtra(e.target.value); autoResize(e.target) }}
                           />
                         </div>
+                        {card.card_type === 'vocab' && (
+                          <div className={styles.fieldGroup}>
+                            <label className={styles.fieldLabel}>
+                              Example sentence
+                            </label>
+                            <textarea
+                              className={styles.fieldTextarea}
+                              rows={2}
+                              ref={autoResize}
+                              value={editExample}
+                              onChange={e => { setEditExample(e.target.value); autoResize(e.target) }}
+                            />
+                          </div>
+                        )}
                         <div className={styles.editActions}>
                           <button onClick={cancelEdit} className={styles.btnSmallGhost}>
                             Cancel
@@ -1676,6 +1700,11 @@ export default function Home() {
                                   <span className={styles.qaPrefix}>Type ·</span> {card.extra}
                                 </p>
                               </div>
+                              {card.example?.trim() && (
+                                <div className={styles.vocabExample}>
+                                  <p className={styles.vocabExampleText}>{card.example}</p>
+                                </div>
+                              )}
                             </div>
                           )
                         ) : card.card_type === 'qa' ? (

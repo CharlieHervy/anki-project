@@ -41,6 +41,9 @@ class CardModel(Base):
     logg = Column(String)
     approved = Column(Boolean, default=True)
     card_type = Column(String, default='cloze')
+    # Exempelmening, bara på glosortkort. Nullbar: cloze- och qa-kort har
+    # ingen. Se sql/vocab_example.sql.
+    example = Column(String)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     session = relationship("SessionModel", back_populates="cards")
     images = relationship(

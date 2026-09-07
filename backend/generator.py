@@ -2035,8 +2035,26 @@ VOCABULARY_SCHEMA = {
                             "forms per gender for this meaning."
                         ),
                     },
+                    "example_target": {
+                        "type": "string",
+                        "description": (
+                            "One short, natural, everyday sentence in the "
+                            "target language containing target_form in exactly "
+                            "that inflected form. Ends with a full stop."
+                        ),
+                    },
+                    "example_source": {
+                        "type": "string",
+                        "description": (
+                            "Translation of example_target into the source "
+                            "language. Ends with a full stop."
+                        ),
+                    },
                 },
-                "required": ["source_phrase", "target_form", "gender"],
+                "required": [
+                    "source_phrase", "target_form", "gender",
+                    "example_target", "example_source",
+                ],
                 "additionalProperties": False,
             },
         },
@@ -2058,12 +2076,16 @@ VOCABULARY_PROMPT = """
 <role>
 
 You extract vocabulary pairs from study material and turn them into
-type-in-the-answer flashcards.
+type-in-the-answer flashcards, each carrying one example sentence you write
+yourself.
 
-You are not writing new material. Every card you produce must be traceable to a
-pair that is actually present in what you were given. You do not add words you
-know belong to the topic but cannot see, you do not correct the material, and
-you do not translate anything yourself.
+The pairs are extraction, not invention. Every card must be traceable to a pair
+that is actually present in what you were given: you do not add words you know
+belong to the topic but cannot see, and you do not correct the material.
+
+The example sentence is the one thing you author. It is built around the pair
+you extracted — never a substitute for reading it, and never a reason to invent
+a pair that would justify a sentence you would like to write.
 
 </role>
 
@@ -2139,7 +2161,31 @@ vocabulary themselves and never become cards.
    prefix, a gender label, brackets or a dash — that formatting is applied
    downstream and will be duplicated if you write it yourself.
 
-6. SKIP WHAT YOU CANNOT READ.
+   The same goes for the example sentence: give example_target and
+   example_source as two separate sentences. Do not put the translation in
+   brackets inside example_target, and do not add quotation marks to either.
+
+6. WRITE ONE EXAMPLE SENTENCE PER CARD.
+
+   This is the only part of the task where you write rather than extract. The
+   sentence shows the student the word doing its job in a normal sentence,
+   which a bare pair cannot.
+
+   - It must contain target_form in EXACTLY the inflected form that is the
+     answer. If the answer is "leurs", the sentence contains "leurs" — not
+     "leur". If a row split by gender, the sentence must agree with the gender
+     of that card: the masculine card gets a masculine noun, the feminine card
+     a feminine one.
+   - Short and everyday. One clause is usually enough. Prefer something a
+     person would actually say over a grammar-drill sentence.
+   - A full sentence, not a fragment: subject and verb, ending in a full stop.
+   - example_source translates example_target naturally, not word for word.
+   - Keep the vocabulary around the target word simple. The sentence exists to
+     illuminate one word; a second unfamiliar word in it defeats the purpose.
+   - Use the material's own context where it fits, but you are not restricted
+     to words that appear in it — this sentence is yours to write.
+
+7. SKIP WHAT YOU CANNOT READ.
 
    If a row is cut off, blurred, at an angle you cannot resolve, or ambiguous
    about which forms pair with which, leave it out and record it in `skipped`.
@@ -2181,6 +2227,27 @@ def build_vocabulary_front(source_phrase: str, gender: str, target_abbrev: str) 
     return f"({target_abbrev}{label}) - {source_phrase}"
 
 
+def build_vocabulary_example(example_target: str, example_source: str) -> str:
+    """
+    "Leurs enfants jouent dehors. (Deras barn leker utomhus.)"
+
+    Samma skäl som för frontformatet: parentesen, mellanrummet och punkten ska
+    se likadana ut på varje kort, och en modell som sätter ihop strängen själv
+    gör det olika från rad till rad.
+
+    Saknas målspråksmeningen finns det ingen exempelmening att visa — då blir
+    fältet tomt och {{#Example}} döljer blocket. Saknas bara översättningen
+    behålls meningen ändå: den är det som lär ut ordet.
+    """
+    target = (example_target or "").strip()
+    source = (example_source or "").strip()
+    if not target:
+        return ""
+    if not source:
+        return target
+    return f"{target} ({source})"
+
+
 def generate_vocabulary(
     source_language: str,
     target_language: str,
@@ -2192,7 +2259,7 @@ def generate_vocabulary(
     "skipped": [...]}.
 
     Korten är färdiga att skriva till cards-tabellen: text = frågan,
-    extra = svaret, card_type = 'vocab'.
+    extra = svaret, example = exempelmeningen, card_type = 'vocab'.
 
     Bild och text går samma väg — samma modell, samma systemprompt, samma
     schema. Enda skillnaden är om materialet ligger som bildblock eller som
@@ -2301,6 +2368,9 @@ def generate_vocabulary(
                 source_phrase, pair.get("gender", "none"), target_abbrev
             ),
             "extra":     target_form,
+            "example":   build_vocabulary_example(
+                pair.get("example_target", ""), pair.get("example_source", "")
+            ),
             "tags":      "",
             "deck":      "",
             "logg":      "",          # Dimindo_Vocab har inget Logg-fält
