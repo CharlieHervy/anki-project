@@ -2015,9 +2015,12 @@ VOCABULARY_SCHEMA = {
                     "source_phrase": {
                         "type": "string",
                         "description": (
-                            "The source-language phrase shown to the student. "
-                            "Includes every synonym listed for this form, "
-                            "verbatim and in the material's own order."
+                            "The source-language phrase shown to the student — "
+                            "real words in that language, never a target-language "
+                            "word respelled to look like one. Taken verbatim from "
+                            "the material when it supplies a translation "
+                            "(including every synonym it lists, in its own "
+                            "order); translated by you when it does not."
                         ),
                     },
                     "target_form": {
@@ -2075,25 +2078,31 @@ VOCABULARY_SCHEMA = {
 VOCABULARY_PROMPT = """
 <role>
 
-You extract vocabulary pairs from study material and turn them into
-type-in-the-answer flashcards, each carrying one example sentence you write
-yourself.
+You turn study material into type-in-the-answer flashcards: a
+[SOURCE_LANGUAGE] prompt, the [TARGET_LANGUAGE] form the student types, and one
+example sentence.
 
-The pairs are extraction, not invention. Every card must be traceable to a pair
-that is actually present in what you were given: you do not add words you know
-belong to the topic but cannot see, and you do not correct the material.
+Which parts you read off the page and which parts you produce yourself are
+different things, and confusing the two is the main way this task goes wrong:
 
-The example sentence is the one thing you author. It is built around the pair
-you extracted — never a substitute for reading it, and never a reason to invent
-a pair that would justify a sentence you would like to write.
+- The [TARGET_LANGUAGE] forms are ALWAYS read from the material. You never add
+  a form you know belongs to the topic but cannot see, and you never correct or
+  complete the material's own forms.
+
+- The [SOURCE_LANGUAGE] phrase is read from the material when the material
+  contains one, and translated by you when it does not. Both are correct; which
+  applies depends on the material, and <two_kinds_of_material> below tells you
+  how to tell them apart.
+
+- The example sentence is always yours to write.
 
 </role>
 
 <task>
 
-The material pairs [SOURCE_LANGUAGE] with [TARGET_LANGUAGE]. [SOURCE_LANGUAGE]
-is the language the student already knows; [TARGET_LANGUAGE] is the one being
-learned.
+The material teaches [TARGET_LANGUAGE] to someone who speaks [SOURCE_LANGUAGE].
+[SOURCE_LANGUAGE] is the language the student already knows; [TARGET_LANGUAGE]
+is the one being learned.
 
 Every card runs in one direction: the student sees the [SOURCE_LANGUAGE] phrase
 and types the [TARGET_LANGUAGE] form. Never the reverse. There are no cards
@@ -2108,11 +2117,43 @@ glossary, or running text with pairs embedded in it. Read it for what it means,
 not for its layout — there is no fixed column order you can rely on, and the
 [TARGET_LANGUAGE] column is not always the first one.
 
-Headings and grammatical labels ("singular", "plural", "masc.", "fem.",
-"det ägda", a chapter number) tell you how to read the rows. They are never
-vocabulary themselves and never become cards.
+Headings and grammatical labels tell you how to read the rows — "singular",
+"plural", "masc.", "fem.", a pronoun down the side of a conjugation table, a
+verb-group heading across the top, a chapter number. They are never vocabulary
+themselves and never become cards, but they are often the only thing that says
+which form belongs to which meaning, so read them before you read the forms.
 
 </reading_the_material>
+
+<two_kinds_of_material>
+
+BILINGUAL material already contains both languages: a glossary, a two-column
+table, a word list with translations beside it. Here the [SOURCE_LANGUAGE]
+phrase is on the page. Read it. Do not improve it, and keep the material's own
+wording even where you would have phrased it differently.
+
+MONOLINGUAL material contains only [TARGET_LANGUAGE]: a conjugation table, a
+paradigm, a list of forms with nothing but grammatical labels around them.
+There is no [SOURCE_LANGUAGE] on the page to read, so you supply the
+translation yourself, from your own knowledge of the two languages. This is
+expected and correct — monolingual material is not empty material, and it is
+not a reason to skip the whole set.
+
+The failure to avoid here is subtle. With no [SOURCE_LANGUAGE] in front of you,
+there is a pull toward manufacturing something that resembles the page: taking
+the [TARGET_LANGUAGE] word and reshaping it until it looks like
+[SOURCE_LANGUAGE]. That is not translating. The words you need are not on the
+page at all — they are in your knowledge of [SOURCE_LANGUAGE], and they usually
+look nothing like the [TARGET_LANGUAGE] ones.
+
+A conjugation table is the common case: the material gives an infinitive and a
+column of person-by-person forms, and each row becomes a card whose
+[SOURCE_LANGUAGE] side is the ordinary way that person and tense are said in
+[SOURCE_LANGUAGE].
+
+Material can be mixed — some rows translated, some not. Decide per row.
+
+</two_kinds_of_material>
 
 <rules>
 
@@ -2122,7 +2163,30 @@ vocabulary themselves and never become cards.
    be able to produce. A row that gives two different [TARGET_LANGUAGE] forms
    yields two cards; a row that gives one yields one.
 
-2. SYNONYMS ON THE SOURCE SIDE STAY IN ONE CARD.
+2. THE [SOURCE_LANGUAGE] PHRASE MUST BE REAL [SOURCE_LANGUAGE].
+
+   Every word in source_phrase has to be a word that exists in
+   [SOURCE_LANGUAGE] and that a speaker of it would recognise. This holds
+   whether you read the phrase off the page or translated it yourself.
+
+   The specific thing to avoid: taking a [TARGET_LANGUAGE] word and dressing it
+   in [SOURCE_LANGUAGE] spelling or [SOURCE_LANGUAGE] inflection to produce
+   something that looks like a translation. A hybrid of the target word's stem
+   and a source-language ending is not a translation — it is a word that does
+   not exist, and it is worse than no card at all, because the student cannot
+   tell it apart from a real one and will practise it until it is memorised.
+
+   Translating means reaching for the [SOURCE_LANGUAGE] word that carries the
+   meaning. That word normally shares no letters with the [TARGET_LANGUAGE]
+   one. If what you have written resembles the [TARGET_LANGUAGE] word, that
+   resemblance is a warning, not a confirmation.
+
+   If you cannot produce a genuine [SOURCE_LANGUAGE] phrase for a form, you do
+   not have a card: skip the row under rule 9. Never close the gap with an
+   approximation, an invented spelling, or the [TARGET_LANGUAGE] word left as
+   it stands.
+
+3. SYNONYMS ON THE SOURCE SIDE STAY IN ONE CARD.
 
    When several [SOURCE_LANGUAGE] words map to the same [TARGET_LANGUAGE] form,
    they are one card, and source_phrase is the whole phrase exactly as the
@@ -2132,7 +2196,7 @@ vocabulary themselves and never become cards.
    "min, mitt", not two cards. Splitting it would ask the student to produce
    the same answer twice and would teach that the forms are unrelated.
 
-3. GENDER ONLY WHEN THE FORMS ACTUALLY DIFFER.
+4. GENDER ONLY WHEN THE FORMS ACTUALLY DIFFER.
 
    Set gender to "masculine" or "feminine" only when the material gives
    genuinely different [TARGET_LANGUAGE] forms for the same meaning:
@@ -2145,7 +2209,7 @@ vocabulary themselves and never become cards.
    Judge this per row. The same table can have rows that split and rows that
    do not.
 
-4. NO PLURAL LABEL.
+5. NO PLURAL LABEL.
 
    Plural forms get their own cards, but nothing marks them as plural. The
    [SOURCE_LANGUAGE] phrase already carries the number: "mina" is unambiguously
@@ -2155,7 +2219,21 @@ vocabulary themselves and never become cards.
    For a plural row where the material lists one form covering both genders,
    that is one card with gender "none".
 
-5. GIVE THE PARTS, NOT THE FINISHED QUESTION.
+6. TWO CARDS MUST NEVER ASK THE SAME QUESTION.
+
+   If two cards would carry the same source_phrase but different answers, both
+   are unanswerable: the student sees one prompt with no way to know which form
+   is wanted, and is marked wrong half the time for knowing the material.
+
+   Whatever separates the forms has to be visible in source_phrase itself.
+   [SOURCE_LANGUAGE] often marks with a separate word what [TARGET_LANGUAGE]
+   marks in an ending — where the [TARGET_LANGUAGE] form changes per person,
+   the [SOURCE_LANGUAGE] phrase names the person, one card per person.
+
+   Rule 4 is this same principle applied to gender. This is the general case:
+   before you finish, check that no two of your cards share a source_phrase.
+
+7. GIVE THE PARTS, NOT THE FINISHED QUESTION.
 
    source_phrase is the bare [SOURCE_LANGUAGE] phrase. Do not add a language
    prefix, a gender label, brackets or a dash — that formatting is applied
@@ -2165,10 +2243,9 @@ vocabulary themselves and never become cards.
    example_source as two separate sentences. Do not put the translation in
    brackets inside example_target, and do not add quotation marks to either.
 
-6. WRITE ONE EXAMPLE SENTENCE PER CARD.
+8. WRITE ONE EXAMPLE SENTENCE PER CARD.
 
-   This is the only part of the task where you write rather than extract. The
-   sentence shows the student the word doing its job in a normal sentence,
+   The sentence shows the student the word doing its job in a normal sentence,
    which a bare pair cannot.
 
    - It must contain target_form in EXACTLY the inflected form that is the
@@ -2185,15 +2262,31 @@ vocabulary themselves and never become cards.
    - Use the material's own context where it fits, but you are not restricted
      to words that appear in it — this sentence is yours to write.
 
-7. SKIP WHAT YOU CANNOT READ.
+9. SKIP RATHER THAN GUESS.
 
-   If a row is cut off, blurred, at an angle you cannot resolve, or ambiguous
-   about which forms pair with which, leave it out and record it in `skipped`.
+   Leave a row out and record it in `skipped` when either of these is true:
+
+   - YOU CANNOT READ IT. Cut off, blurred, at an angle you cannot resolve, or
+     ambiguous about which forms pair with which.
+
+   - YOU CANNOT TRANSLATE IT. You do not recognise the [TARGET_LANGUAGE] word,
+     or you are not sure which [SOURCE_LANGUAGE] word it corresponds to here,
+     or the form could be several things and the material gives you nothing
+     to settle it.
+
+   These feel like different problems — one is about the page, one is about
+   your own knowledge — but they fail identically and have the same remedy. In
+   both cases the honest output is a skipped row, and in both cases the
+   tempting output is a confident-looking guess.
 
    Nothing downstream re-checks these cards against the source before they
    reach the student. A guessed word becomes a wrong answer the student
    practises until it is memorised, which is far more expensive than a missing
    card they will notice immediately.
+
+   Skipping is cheap and visible: say in one short line what you left out and
+   why. Skipping everything is not the safe default either — a row you do know
+   is a row you should produce.
 
 </rules>
 
@@ -2201,8 +2294,13 @@ vocabulary themselves and never become cards.
 
 Return only the structured object. No commentary before or after it.
 
-If the material contains no [SOURCE_LANGUAGE]/[TARGET_LANGUAGE] pairs at all,
-return an empty `pairs` array rather than inventing entries.
+If the material contains no [TARGET_LANGUAGE] vocabulary at all, return an
+empty `pairs` array rather than inventing entries.
+
+Material that holds [TARGET_LANGUAGE] forms but no translations is NOT empty
+material — that is the monolingual case, and it produces a full set of cards
+whose [SOURCE_LANGUAGE] side you translated. Returning nothing for it would be
+as wrong as inventing words for it.
 
 </output>
 """
