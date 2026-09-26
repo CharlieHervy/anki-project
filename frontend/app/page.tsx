@@ -1520,6 +1520,23 @@ export default function Home() {
               ← New deck
             </button>
 
+            {/* Export failures land back here, so the banner has to exist in
+                this view too — the upload-view copy never renders during
+                review, which made a failed export look like a silent bounce
+                back to the card list. */}
+            {error && (
+              <div className={styles.error}>
+                <span className={styles.errorIcon}>⚠</span>
+                <div className={styles.errorBody}>
+                  <p className={styles.errorTitle}>Something went wrong</p>
+                  <p className={styles.errorMsg}>{error}</p>
+                </div>
+                <button onClick={() => setError('')} className={styles.errorClose}>
+                  ×
+                </button>
+              </div>
+            )}
+
             <div className={styles.reviewHeader}>
               <div>
                 <h2 className={styles.reviewTitle}>Review cards</h2>
