@@ -884,6 +884,16 @@ export default function Home() {
 
   // --- Export to .apkg ---
   async function handleExport() {
+    // An image upload is added to card_images only after its POST resolves
+    // (put_card_image's Storage round-trip, then the DB commit). Exporting
+    // while imageBusyIds is non-empty would query card_images before that
+    // commit lands, silently producing a card with no image. Block instead
+    // of racing it.
+    if (imageBusyIds.size > 0) {
+      setError('Wait for images to finish uploading before exporting.')
+      return
+    }
+
     // Persist the latest deck name first — covers the case where the field
     // still has focus and its onBlur write hasn't fired yet.
     await applyDeckName(deckName)
@@ -1511,10 +1521,12 @@ export default function Home() {
               </div>
               <button
                 onClick={handleExport}
-                disabled={approvedCount === 0}
+                disabled={approvedCount === 0 || imageBusyIds.size > 0}
                 className={styles.exportBtn}
               >
-                Export {approvedCount} cards as .apkg →
+                {imageBusyIds.size > 0
+                  ? 'Uploading image…'
+                  : `Export ${approvedCount} cards as .apkg →`}
               </button>
             </div>
 
@@ -1834,10 +1846,12 @@ export default function Home() {
               </div>
               <button
                 onClick={handleExport}
-                disabled={approvedCount === 0}
+                disabled={approvedCount === 0 || imageBusyIds.size > 0}
                 className={styles.exportBtn}
               >
-                Export {approvedCount} cards as .apkg →
+                {imageBusyIds.size > 0
+                  ? 'Uploading image…'
+                  : `Export ${approvedCount} cards as .apkg →`}
               </button>
             </div>
 
