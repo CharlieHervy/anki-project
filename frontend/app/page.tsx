@@ -898,23 +898,31 @@ export default function Home() {
     // still has focus and its onBlur write hasn't fired yet.
     await applyDeckName(deckName)
     setState('exporting')
-    const res = await fetch(`${API}/api/export/${sessionId}`, {
-      method: 'POST',
-      headers: authHeaders,
-    })
-    if (!res.ok) {
-      setError('Export failed.')
+    try {
+      const res = await fetch(`${API}/api/export/${sessionId}`, {
+        method: 'POST',
+        headers: authHeaders,
+      })
+      if (!res.ok) {
+        const detail = await res.text().catch(() => '')
+        setError(`Export failed (${res.status}). ${detail}`.trim())
+        setState('review')
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'dimindo_export.apkg'
+      a.click()
+      URL.revokeObjectURL(url)
+      setState('done')
+    } catch (e) {
+      // Without this the rejection is unhandled and the view stays on
+      // 'exporting' forever, with no error and no way back.
+      setError(`Export failed: ${e instanceof Error ? e.message : String(e)}`)
       setState('review')
-      return
     }
-    const blob = await res.blob()
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'dimindo_export.apkg'
-    a.click()
-    URL.revokeObjectURL(url)
-    setState('done')
   }
 
   // Stripe Checkout
