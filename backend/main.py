@@ -18,6 +18,7 @@ from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Hea
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, Response
+from starlette.background import BackgroundTask
 from sqlalchemy.orm import Session
 from generator import (
     generate_cards_stream,
@@ -1628,7 +1629,14 @@ async def export(
     # läser vid paketeringen. Mappen raderas så fort .apkg-filen är skriven.
     images_by_card = load_card_images(db, [c.id for c in cards])
     media_dir, media_files, bild_by_card = await collect_export_media(images_by_card)
-    output_path = f"/tmp/dimindo_{session_id}.apkg"
+    # Unique per request, not per session: two exports of the same session
+    # (a retry while an earlier request is still running server-side, or a
+    # double click) must never write the same path, or one response can end
+    # up streaming bytes that a concurrent request has since overwritten —
+    # a Content-Length/body mismatch the browser reports as a bare
+    # net::ERR_FAILED even though this handler itself returned 200.
+    output_fd, output_path = tempfile.mkstemp(prefix=f"dimindo_{session_id}_", suffix=".apkg")
+    os.close(output_fd)
 
     try:
         cards_data = [
@@ -1653,7 +1661,8 @@ async def export(
     return FileResponse(
         path=output_path,
         filename="dimindo_export.apkg",
-        media_type="application/octet-stream"
+        media_type="application/octet-stream",
+        background=BackgroundTask(lambda: os.remove(output_path)),
     )
 
 
