@@ -3,8 +3,10 @@ import uuid
 import json
 import asyncio
 import logging
+import secrets
 import shutil
 import tempfile
+import time
 import stripe
 
 logging.basicConfig(level=logging.INFO)
@@ -1609,6 +1611,34 @@ async def update_card_content(
 
 # ── /api/export/{session_id} ──────────────────────────────────────────────────
 
+# Färdigbyggda .apkg-filer som väntar på att hämtas: token → (sökväg, utgångstid).
+# Exporten byggs i POST:en men levereras i en separat GET, så att webbläsarens
+# egen nedladdningshanterare hämtar filen i stället för fetch()+Blob. En
+# kortlek med bilder blir snabbt 10–20 MB, och att läsa in den i JS-minnet
+# först är både onödigt och skört — minsta avbrott ger ett ogripbart
+# "Failed to fetch" i stället för en nedladdning som kan återupptas.
+#
+# In-memory: en förlorad token vid omstart betyder bara att användaren får
+# klicka Export igen, och filerna ligger ändå i containerns /tmp.
+_EXPORT_DOWNLOADS: dict[str, tuple[str, float]] = {}
+
+# Tilltaget i underkant: token:en löses in direkt efter POST:en. Tiden finns
+# för att en övergiven nedladdning inte ska lämna filen kvar för alltid.
+EXPORT_TOKEN_TTL_SECONDS = 600
+
+
+def _sweep_expired_exports() -> None:
+    """Städar bort filer vars token gått ut. Körs vid varje ny export."""
+    now = time.time()
+    for token, (path, expires_at) in list(_EXPORT_DOWNLOADS.items()):
+        if expires_at <= now:
+            _EXPORT_DOWNLOADS.pop(token, None)
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+
 @app.post("/api/export/{session_id}")
 async def export(
     session_id: str,
@@ -1658,11 +1688,40 @@ async def export(
         if media_dir:
             shutil.rmtree(media_dir, ignore_errors=True)
 
+    _sweep_expired_exports()
+    token = secrets.token_urlsafe(32)
+    _EXPORT_DOWNLOADS[token] = (output_path, time.time() + EXPORT_TOKEN_TTL_SECONDS)
+
+    return {
+        "download_url": f"/api/export/download/{token}",
+        "size": os.path.getsize(output_path),
+    }
+
+
+@app.get("/api/export/download/{token}")
+async def export_download(token: str):
+    """
+    Levererar en färdigbyggd .apkg. Anropas genom att webbläsaren navigerar
+    hit, inte via fetch — därför ingen x-user-id-header och ingen CORS att ta
+    hänsyn till. Token:en ur POST:en är behörigheten, och den är engångs.
+    """
+    entry = _EXPORT_DOWNLOADS.pop(token, None)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Nedladdningen har gått ut. Klicka Export igen.")
+
+    path, expires_at = entry
+    if expires_at <= time.time() or not os.path.exists(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+        raise HTTPException(status_code=404, detail="Nedladdningen har gått ut. Klicka Export igen.")
+
     return FileResponse(
-        path=output_path,
+        path=path,
         filename="dimindo_export.apkg",
         media_type="application/octet-stream",
-        background=BackgroundTask(lambda: os.remove(output_path)),
+        background=BackgroundTask(lambda: os.remove(path)),
     )
 
 

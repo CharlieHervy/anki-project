@@ -909,13 +909,13 @@ export default function Home() {
         setState('review')
         return
       }
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'dimindo_export.apkg'
-      a.click()
-      URL.revokeObjectURL(url)
+      // Servern har byggt filen och ger oss en engångslänk. Nedladdningen
+      // lämnas till webbläsaren själv i stället för att hämtas som en Blob:
+      // en kortlek med bilder är lätt 10–20 MB, och att läsa in den i minnet
+      // via fetch gör nedladdningen både onödigt tung och känslig för
+      // avbrott — den kan inte återupptas och ger bara "Failed to fetch".
+      const { download_url } = await res.json()
+      window.location.href = `${API}${download_url}`
       setState('done')
     } catch (e) {
       // Without this the rejection is unhandled and the view stays on
