@@ -20,60 +20,54 @@ def create_cloze_model() -> genanki.Model:
     """
 
     css = """
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
-/* ── Sidbakgrund — pappersfärg ─────────────────────────────── */
 .card {
-  background-color: #f7f5f0 !important;
-  font-family: 'DM Serif Display', Georgia, serif;
+  background-color: #2a2f36 !important;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-size: 16px;
-  color: #0d0d0d;
+  color: #16181b;
   padding: 24px 16px;
   min-height: 100%;
   box-sizing: border-box;
+  text-rendering: optimizeLegibility;
 }
 
-/* ── Kortbox — vit, kantad, lätt skugga ────────────────────── */
 .dimindo-card {
   background: #ffffff !important;
-  border: 1px solid #d8d3c8;
-  border-radius: 4px;
-  padding: 20px 22px;
-  max-width: 640px;
+  border: 1px solid #3a414b;
+  border-radius: 6px;
+  padding: 28px 30px;
+  max-width: 680px;
   margin: 0 auto;
   text-align: left;
-  font-size: 0.9rem;
-  line-height: 1.65;
-  color: #0d0d0d;
+  font-size: 1.125rem;     /* 18 px */
+  line-height: 1.6;
+  color: #16181b;
 }
 
-/* ── Cloze: cream-highlight (identiskt med granskningsvyn) ─── */
-/* Gäller både [...]‐luckan på framsidan och svaret på baksidan */
 .cloze {
-  background: #ede9e1 !important;
-  color: #0d0d0d !important;
-  padding: 1px 4px;
-  border-radius: 2px;
-  font-weight: 500;
+  background: #dde6f0 !important;
+  color: #0b0f14 !important;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
 }
 
-/* ── Extra-fält ─────────────────────────────────────────────── */
 .extra-text {
-  font-family: 'DM Sans', sans-serif;
-  font-weight: 300;
-  font-size: 0.82rem;
-  color: #8a8478;
+  font-family: inherit;
+  font-weight: 400;
+  font-size: 0.9em;        /* ≈ 16 px */
+  color: #454d5a;
   line-height: 1.55;
-  border-top: 1px solid #ede9e1;
-  padding-top: 8px;
-  margin-top: 8px;
+  border-top: 1px solid #e3e6ea;
+  padding-top: 12px;
+  margin-top: 14px;
 }
 
-/* ── Bild ───────────────────────────────────────────────────── */
 .bild-container {
   margin-top: 16px;
 }
-
 .bild-container img {
   max-width: 100%;
   max-height: 400px;
@@ -82,8 +76,6 @@ def create_cloze_model() -> genanki.Model:
   margin: 0 auto;
   border-radius: 4px;
 }
-
-/* Flera bilder på samma kort staplas — utan detta ligger de kant i kant. */
 .bild-container img + img {
   margin-top: 10px;
 }
@@ -133,49 +125,54 @@ def create_basic_model() -> genanki.Model:
     Stable model ID — never change BASIC_MODEL_ID once cards are in the wild.
     """
     css = """
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
 
 .card {
-  background-color: #f7f5f0 !important;
-  font-family: 'DM Serif Display', Georgia, serif;
+  background-color: #2a2f36 !important;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-size: 16px;
-  color: #0d0d0d;
+  color: #16181b;
   padding: 24px 16px;
   min-height: 100%;
   box-sizing: border-box;
+  text-rendering: optimizeLegibility;
 }
 
 .dimindo-card {
   background: #ffffff !important;
-  border: 1px solid #d8d3c8;
-  border-radius: 4px;
-  padding: 20px 22px;
-  max-width: 640px;
+  border: 1px solid #3a414b;
+  border-radius: 6px;
+  padding: 28px 30px;
+  max-width: 680px;
   margin: 0 auto;
   text-align: left;
-  font-size: 0.9rem;
-  line-height: 1.65;
-  color: #0d0d0d;
+  font-size: 1.125rem;     /* 18 px */
+  line-height: 1.6;
+  color: #16181b;
+}
+
+.cloze {
+  background: #dde6f0 !important;
+  color: #0b0f14 !important;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 600;
 }
 
 .extra-text {
-  font-family: 'DM Sans', sans-serif;
-  font-weight: 300;
-  font-size: 0.82rem;
-  color: #8a8478;
+  font-family: inherit;
+  font-weight: 400;
+  font-size: 0.9em;        /* ≈ 16 px */
+  color: #454d5a;
   line-height: 1.55;
-  border-top: 1px solid #ede9e1;
-  padding-top: 8px;
-  margin-top: 8px;
+  border-top: 1px solid #e3e6ea;
+  padding-top: 12px;
+  margin-top: 14px;
 }
 
-/* ── Bild ───────────────────────────────────────────────────── */
-/* Basic har inget eget Bild-fält (se export_to_apkg) — bildmarkupen läggs
-   in i Back-fältet och bär den här klassen, så regeln matchar Cloze. */
 .bild-container {
   margin-top: 16px;
 }
-
 .bild-container img {
   max-width: 100%;
   max-height: 400px;
@@ -184,8 +181,6 @@ def create_basic_model() -> genanki.Model:
   margin: 0 auto;
   border-radius: 4px;
 }
-
-/* Flera bilder på samma kort staplas — utan detta ligger de kant i kant. */
 .bild-container img + img {
   margin-top: 10px;
 }
@@ -237,79 +232,68 @@ def create_vocab_model() -> genanki.Model:
     Stabilt model_id — ändra aldrig VOCAB_MODEL_ID när kort väl är ute.
     """
     css = """
-@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:ital,wght@0,400;0,500;0,600;1,400;1,500&display=swap');
 
-/* ── Sidbakgrund — pappersfärg ─────────────────────────────── */
 .card {
-  background-color: #f7f5f0 !important;
-  font-family: 'DM Serif Display', Georgia, serif;
+  background-color: #2a2f36 !important;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   font-size: 16px;
-  color: #0d0d0d;
+  color: #16181b;
   padding: 24px 16px;
   min-height: 100%;
   box-sizing: border-box;
+  text-rendering: optimizeLegibility;
 }
 
-/* ── Kortbox — vit, kantad. Centrerad: ett gloskort är ett ord. ── */
 .dimindo-card {
   background: #ffffff !important;
-  border: 1px solid #d8d3c8;
-  border-radius: 4px;
-  padding: 20px 22px;
-  max-width: 640px;
+  border: 1px solid #3a414b;
+  border-radius: 6px;
+  padding: 28px 30px;
+  max-width: 680px;
   margin: 0 auto;
   text-align: center;
-  font-size: 1.05rem;
-  line-height: 1.65;
-  color: #0d0d0d;
+  font-size: 1.25rem;      /* 20 px */
+  line-height: 1.5;
+  color: #16181b;
 }
 
-/* ── Inmatningsfältet som {{type:Back}} renderar på framsidan ──
-   Anki ger fältet id="typeans". Rätt/fel-markeringen på baksidan är
-   Ankis egen rendering och styrs inte härifrån. */
 #typeans {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 0.95rem;
-  padding: 6px 10px;
-  margin-top: 14px;
-  border: 1px solid #d8d3c8;
-  border-radius: 3px;
+  font-family: inherit;
+  font-size: 1.1rem;
+  padding: 10px 14px;
+  margin-top: 18px;
+  border: 1px solid #c3c9d1;
+  border-radius: 4px;
   background: #ffffff;
-  color: #0d0d0d;
+  color: #16181b;
   outline: none;
 }
-#typeans:focus { border-color: #b8a06a; }
+#typeans:focus {
+  border-color: #5b7fa8;
+  box-shadow: 0 0 0 3px rgba(91, 127, 168, 0.25);
+}
 
-/* ── Skiljelinjen mellan fråga och svar på baksidan ─────────── */
 hr#answer {
   border: none;
-  border-top: 1px solid #ede9e1;
-  margin: 16px 0;
+  border-top: 1px solid #e3e6ea;
+  margin: 20px 0;
 }
 
-/* ── Exempelmening ──────────────────────────────────────────
-   Samma roll som .extra-text i Cloze/Basic: stödtext på baksidan, avdelad
-   med en hårfin linje i samma cream-ton som hr#answer. Kursivt eftersom
-   meningen till största delen är målspråk — normal sättning för citerat
-   främmande språk. Ingen citattecken: strängen slutar med den svenska
-   översättningen inom parentes, och ett avslutande citattecken efter den
-   parentesen skulle påstå att översättningen också är citerad. */
 .example-sentence {
-  font-family: 'DM Serif Display', Georgia, serif;
+  font-family: inherit;
   font-style: italic;
-  font-size: 0.95rem;
-  line-height: 1.6;
-  color: #0d0d0d;
-  border-top: 1px solid #ede9e1;
-  padding-top: 14px;
-  margin-top: 16px;
+  font-size: 0.85em;       /* ≈ 17 px */
+  line-height: 1.55;
+  color: #2b3038;
+  border-top: 1px solid #e3e6ea;
+  padding-top: 16px;
+  margin-top: 20px;
 }
 
-/* ── Bild ───────────────────────────────────────────────────── */
 .image-container {
   margin-top: 16px;
 }
-
 .image-container img {
   max-width: 100%;
   max-height: 400px;
@@ -318,8 +302,6 @@ hr#answer {
   margin: 0 auto;
   border-radius: 4px;
 }
-
-/* Flera bilder på samma kort staplas — utan detta ligger de kant i kant. */
 .image-container img + img {
   margin-top: 10px;
 }
