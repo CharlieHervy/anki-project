@@ -26,6 +26,7 @@ from generator import (
     generate_cards_stream,
     generate_vocabulary,
     parse_tsv,
+    preprocess_source_material,
     review_cards,
     build_image_blocks,
 )
@@ -252,8 +253,25 @@ async def generate(
             quick_refill_remaining=data.get('quick_refill_remaining', 0)
         )
 
+    # 3b. Preprocessing — tyst steg mellan upload och generate_cards_stream/
+    #     review_cards. Körs innan DB-sessionen skapas så att original och
+    #     preprocessad text kan sparas i samma insert. Bildläge har ingen
+    #     riktig källtext (source_material är bara en platshållare, se
+    #     ResolvedSource) — steget hoppas över där, och de två kolumnerna
+    #     blir identiska precis som vid ett misslyckat anrop.
+    if src.is_images:
+        preprocessed_source_material = source_material
+    else:
+        preprocessed_source_material = await asyncio.to_thread(
+            preprocess_source_material, source_material
+        )
+
     # 4. Skapa DB-session (efter kvotcheck — undviker tomma sessioner vid kvotfel)
-    db_session = SessionModel(user_id=x_user_id, source_material=source_material)
+    db_session = SessionModel(
+        user_id=x_user_id,
+        source_material=source_material,
+        preprocessed_source_material=preprocessed_source_material,
+    )
     db.add(db_session)
     db.commit()
     db.refresh(db_session)
@@ -282,7 +300,7 @@ async def generate(
 
     def run_generator():
         try:
-            for chunk in generate_cards_stream(source_material, language, src.images):
+            for chunk in generate_cards_stream(preprocessed_source_material, language, src.images):
                 chunk_queue.put(chunk)
             chunk_queue.put(DONE_SENTINEL)
         except Exception as e:
@@ -365,7 +383,7 @@ async def generate(
             yield f"data: {json.dumps({'type': 'reviewing'})}\n\n"
 
             indices_to_remove = await asyncio.to_thread(
-                review_cards, source_material, cards, src.images
+                review_cards, preprocessed_source_material, cards, src.images
             )
             if indices_to_remove:
                 remove_set = set(indices_to_remove)

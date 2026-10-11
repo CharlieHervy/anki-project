@@ -22,6 +22,11 @@ class SessionModel(Base):
     user_id = Column(String, nullable=False)
     title = Column(String, nullable=True)           # ← extraheras från TITLE:-raden
     source_material = Column(String, nullable=True) # ← sparas vid generering
+    # Outputen från preprocess_source_material() i generator.py — samma
+    # innehåll som source_material om preprocessing-steget fallerade (fail-
+    # open). Framtidssäkring för en eventuell visningsfunktion; inte
+    # exponerad i UI idag. Se backend/sql/preprocessed_source_material.sql.
+    preprocessed_source_material = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
     cards = relationship("CardModel", back_populates="session", cascade="all, delete")
