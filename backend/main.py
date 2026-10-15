@@ -253,24 +253,24 @@ async def generate(
             quick_refill_remaining=data.get('quick_refill_remaining', 0)
         )
 
-    # 3b. Preprocessing — tyst steg mellan upload och generate_cards_stream/
-    #     review_cards. Körs innan DB-sessionen skapas så att original och
-    #     preprocessad text kan sparas i samma insert. Bildläge har ingen
-    #     riktig källtext (source_material är bara en platshållare, se
-    #     ResolvedSource) — steget hoppas över där, och de två kolumnerna
-    #     blir identiska precis som vid ett misslyckat anrop.
-    if src.is_images:
-        preprocessed_source_material = source_material
-    else:
-        preprocessed_source_material = await asyncio.to_thread(
-            preprocess_source_material, source_material
-        )
-
-    # 4. Skapa DB-session (efter kvotcheck — undviker tomma sessioner vid kvotfel)
+    # 4. Skapa DB-session (efter kvotcheck — undviker tomma sessioner vid kvotfel).
+    #
+    # Skapas med source_material direkt, UTAN att vänta på preprocessing —
+    # annars väntar klienten (och eventuella proxyer mellan den och backend)
+    # på det första svaret tills en potentiellt flerminuterslång
+    # preprocessing-körning är klar, och anslutningen hinner timeouta innan
+    # SSE-strömmen ens öppnats. Preprocessing körs istället INUTI
+    # event_stream(), efter att session_id redan yield:ats, med samma
+    # keepalive-mönster som genereringssteget nedan — se kommentaren vid
+    # "Preprocessing" längre ner.
+    #
+    # Bildläge har ingen riktig källtext att preprocessa (source_material är
+    # bara en platshållare, se ResolvedSource), så preprocessed_source_material
+    # sätts direkt till samma platshållare istället för att vänta på steget.
     db_session = SessionModel(
         user_id=x_user_id,
         source_material=source_material,
-        preprocessed_source_material=preprocessed_source_material,
+        preprocessed_source_material=source_material if src.is_images else None,
     )
     db.add(db_session)
     db.commit()
@@ -298,9 +298,9 @@ async def generate(
     DONE_SENTINEL = object()
     ERROR_SENTINEL = object()
 
-    def run_generator():
+    def run_generator(preprocessed_text):
         try:
-            for chunk in generate_cards_stream(preprocessed_source_material, language, src.images):
+            for chunk in generate_cards_stream(preprocessed_text, language, src.images):
                 chunk_queue.put(chunk)
             chunk_queue.put(DONE_SENTINEL)
         except Exception as e:
@@ -313,7 +313,53 @@ async def generate(
 
         yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
 
-        thread = threading.Thread(target=run_generator, daemon=True)
+        # Preprocessing — körs här, efter att SSE-anslutningen redan är öppen,
+        # inte innan. asyncio.to_thread() körs i bakgrunden medan vi pollar
+        # den med keepalive-kommentarer var 15:e sekund, samma mönster och
+        # samma MAX_SILENCE-tak som genereringsfasen nedan. Själva funktionen
+        # är fail-open (returnerar source_material oförändrat vid fel), så det
+        # här taket är bara ett skydd mot att en död bakgrundstråd aldrig
+        # svarar — inte den normala vägen.
+        if src.is_images:
+            preprocessed_source_material = source_material
+        else:
+            preprocess_task = asyncio.ensure_future(
+                asyncio.to_thread(preprocess_source_material, source_material)
+            )
+            silence_seconds = 0
+            MAX_SILENCE = 600
+            while not preprocess_task.done():
+                try:
+                    await asyncio.wait_for(asyncio.shield(preprocess_task), timeout=15)
+                except asyncio.TimeoutError:
+                    silence_seconds += 15
+                    if silence_seconds >= MAX_SILENCE:
+                        preprocess_task.cancel()
+                        break
+                    yield ": keepalive\n\n"
+
+            if preprocess_task.cancelled():
+                logging.error("[PREPROCESS] timed out, falling back to original source_material")
+                preprocessed_source_material = source_material
+            elif preprocess_task.exception() is not None:
+                logging.error(f"[PREPROCESS] background task failed: {preprocess_task.exception()}")
+                preprocessed_source_material = source_material
+            else:
+                preprocessed_source_material = preprocess_task.result()
+
+            db_pp = next(get_db())
+            try:
+                db_pp.query(SessionModel).filter(
+                    SessionModel.id == db_session.id
+                ).update({'preprocessed_source_material': preprocessed_source_material})
+                db_pp.commit()
+            except Exception:
+                db_pp.rollback()
+                logging.exception("Failed to save preprocessed_source_material")
+            finally:
+                db_pp.close()
+
+        thread = threading.Thread(target=run_generator, args=(preprocessed_source_material,), daemon=True)
         thread.start()
 
         try:
