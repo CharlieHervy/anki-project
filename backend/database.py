@@ -27,6 +27,14 @@ class SessionModel(Base):
     # open). Framtidssäkring för en eventuell visningsfunktion; inte
     # exponerad i UI idag. Se backend/sql/preprocessed_source_material.sql.
     preprocessed_source_material = Column(String, nullable=True)
+    # Bakgrundspipelinens status för /api/generate — satt till 'processing' när
+    # sessionen skapas, uppdaterad till 'reviewing'/'done'/'error' av
+    # run_generation_pipeline() i main.py. NULL på sessioner skapade innan
+    # detta fält fanns; inget läser status för dem (historiken pollar inte).
+    # Pollas av GET /api/generate/{session_id}/status — se den kommentaren för
+    # varför generering inte längre hänger på en enda öppen anslutning.
+    status = Column(String, nullable=True)
+    error_message = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now())
     cards = relationship("CardModel", back_populates="session", cascade="all, delete")

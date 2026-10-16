@@ -124,13 +124,103 @@ def validate_input_length(word_count: int, plan: str, qr_remaining: int = 0) -> 
         )
     return True, ""
 
-def sse_error(message: str, **kwargs) -> StreamingResponse:
-    """Returnerar ett SSE-felmeddelande som StreamingResponse."""
-    payload = {"type": "error", "message": message, **kwargs}
-    return StreamingResponse(
-        iter([f"data: {json.dumps(payload)}\n\n"]),
-        media_type="text/event-stream"
-    )
+def json_error(message: str, **kwargs) -> dict:
+    """Vanligt JSON-felsvar för /api/generate — inget jobb startades."""
+    return {"status": "error", "message": message, **kwargs}
+
+
+# run_generation_pipeline() körs i en bakgrundstråd, HELT frikopplad från
+# klientens HTTP-anslutning. Anledningen: pipelinen (preprocess → generera →
+# granska → spara) kan ta 10+ minuter för en stor text, och att hålla EN
+# anslutning öppen hela den tiden gör leveransen av redan betalda kort
+# beroende av att ingenting mellan klient och backend (proxy, mobilnät,
+# flik-stängning) stryper anslutningen under tiden — vilket inträffade i
+# produktion även när Claude levererade helt korrekt. Nu svarar /api/generate
+# direkt med session_id, pipelinen fortsätter oavsett vad klienten gör, och
+# frontend pollar GET /api/generate/{session_id}/status istället för att läsa
+# en strömmande anslutning. Se sql/generation_status.sql.
+def run_generation_pipeline(
+    session_id: str,
+    user_id: str,
+    source_material: str,
+    language: str,
+    images: list[tuple[str, bytes]] | None,
+    is_images: bool,
+) -> None:
+    db = next(get_db())
+    try:
+        if is_images:
+            # Bildläge har ingen riktig källtext att preprocessa (source_material
+            # är bara en platshållare, se ResolvedSource i main.py).
+            preprocessed_text = source_material
+        else:
+            preprocessed_text = preprocess_source_material(source_material)
+            db.query(SessionModel).filter(SessionModel.id == session_id).update(
+                {'preprocessed_source_material': preprocessed_text}
+            )
+            db.commit()
+
+        full_tsv = "".join(generate_cards_stream(preprocessed_text, language, images))
+
+        if not full_tsv.strip():
+            raise RuntimeError("Claude returnerade ingen output.")
+
+        # TITLE-raden plockas ut här istället för live under strömningen —
+        # det finns ingen klient som läser rad för rad längre.
+        title = None
+        tsv_lines = []
+        for line in full_tsv.strip().split('\n'):
+            stripped = line.strip()
+            if title is None and stripped.startswith('TITLE:'):
+                title = stripped[len('TITLE:'):].strip()
+                continue
+            tsv_lines.append(line)
+
+        cards = parse_tsv('\n'.join(tsv_lines))
+        if not cards:
+            raise RuntimeError(
+                "We couldn't find anything to turn into cards. "
+                "Try a text with clearer facts or statements."
+            )
+
+        update_fields = {'status': 'reviewing'}
+        if title:
+            update_fields['title'] = title
+        db.query(SessionModel).filter(SessionModel.id == session_id).update(update_fields)
+        db.commit()
+
+        indices_to_remove = review_cards(preprocessed_text, cards, images)
+        if indices_to_remove:
+            remove_set = set(indices_to_remove)
+            cards = [card for i, card in enumerate(cards) if (i + 1) not in remove_set]
+
+        for i, card in enumerate(cards):
+            db.add(CardModel(
+                session_id=session_id,
+                user_id=user_id,
+                position=i,
+                text=card.get('text', ''),
+                extra=card.get('extra', ''),
+                tags=card.get('tags', ''),
+                deck=card.get('deck', ''),
+                logg=card.get('logg', ''),
+                card_type=card.get('card_type', 'cloze'),
+                approved=True,
+            ))
+        db.query(SessionModel).filter(SessionModel.id == session_id).update({'status': 'done'})
+        db.commit()
+    except Exception as e:
+        logging.exception(f"[PIPELINE] session {session_id} failed")
+        try:
+            db.rollback()
+            db.query(SessionModel).filter(SessionModel.id == session_id).update(
+                {'status': 'error', 'error_message': str(e)[:500]}
+            )
+            db.commit()
+        except Exception:
+            logging.exception(f"[PIPELINE] failed to record error state for session {session_id}")
+    finally:
+        db.close()
 
 
 # ── /api/generate ─────────────────────────────────────────────────────────────
@@ -147,10 +237,6 @@ async def generate(
     # ── Upplösningspunkten. Efter denna vet resten av flödet bara .text/.images ──
     # Gaten körs om här och inte bara i /api/upload: upload_id är en referens
     # till serverlagrad data, så den måste auktoriseras vid varje användning.
-    #
-    # Både gaten och upplösningen måste bli SSE-fel, inte HTTP-fel: klienten
-    # läser svaret som en event-stream, så ett rått 403 skulle tolkas som en
-    # tom ström och misslyckas tyst.
     try:
         if upload_id:
             require_multimodal_access(x_user_id)
@@ -159,10 +245,10 @@ async def generate(
             source_material, upload_id, "", x_user_id
         )
     except HTTPException as e:
-        return sse_error(str(e.detail))
+        return json_error(str(e.detail))
 
     if not src.text.strip():
-        return sse_error("No source material provided.")
+        return json_error("No source material provided.")
 
     source_material = src.text
     word_count = count_words(source_material)
@@ -178,12 +264,12 @@ async def generate(
         qr_remaining = quota_response.data.get('quick_refill_remaining', 0)
         monthly_remaining = quota_response.data.get('monthly_remaining', 0)
     except Exception as e:
-        return sse_error(f"Quota check failed: {str(e)}")
+        return json_error(f"Quota check failed: {str(e)}")
 
     # 2. Validera inputlängd mot plan + QR-status
     valid, error_msg = validate_input_length(word_count, plan, qr_remaining)
     if not valid:
-        return sse_error(error_msg)
+        return json_error(error_msg)
 
     # ── ÄNDRING 3: pool-tvång + blockering av ogiltigt Pro-fall ──────────────
     # Free med >2 000 ord och QR-krediter → tvinga QR-poolen (auto-select 2).
@@ -203,7 +289,7 @@ async def generate(
             reset_date = datetime.fromisoformat(next_reset_raw).strftime("%B %d")
         except (TypeError, ValueError):
             reset_date = "your next billing date"
-        return sse_error(
+        return json_error(
             f"Your monthly generation pool is empty. Quick Refill supports texts up to 3,000 words. "
             f"Shorten your text or wait for your pool to reset on {reset_date}."
         )
@@ -223,7 +309,7 @@ async def generate(
             }
         ).execute()
     except Exception as e:
-        return sse_error(f"Quota consumption failed: {str(e)}")
+        return json_error(f"Quota consumption failed: {str(e)}")
 
     # ── Felhantering efter consume_generation ────────────────────────────────
     if not consume_response.data.get('success'):
@@ -236,7 +322,7 @@ async def generate(
         # fått en handler för reason. Frontend bör dispatcha på `reason`,
         # inte på `message`.
         if reason == 'qr_word_limit_exceeded':
-            return sse_error(
+            return json_error(
                 "Quick Refill supports texts up to 3,000 words. "
                 "Shorten your text to use a Quick Refill credit, "
                 "or wait for your monthly pool to reset.",
@@ -245,7 +331,7 @@ async def generate(
                 quick_refill_remaining=data.get('quick_refill_remaining', 0)
             )
 
-        return sse_error(
+        return json_error(
             'quota_exceeded',
             reason=reason,
             lifetime_remaining=data.get('lifetime_remaining', 0),
@@ -254,23 +340,15 @@ async def generate(
         )
 
     # 4. Skapa DB-session (efter kvotcheck — undviker tomma sessioner vid kvotfel).
-    #
-    # Skapas med source_material direkt, UTAN att vänta på preprocessing —
-    # annars väntar klienten (och eventuella proxyer mellan den och backend)
-    # på det första svaret tills en potentiellt flerminuterslång
-    # preprocessing-körning är klar, och anslutningen hinner timeouta innan
-    # SSE-strömmen ens öppnats. Preprocessing körs istället INUTI
-    # event_stream(), efter att session_id redan yield:ats, med samma
-    # keepalive-mönster som genereringssteget nedan — se kommentaren vid
-    # "Preprocessing" längre ner.
-    #
     # Bildläge har ingen riktig källtext att preprocessa (source_material är
-    # bara en platshållare, se ResolvedSource), så preprocessed_source_material
-    # sätts direkt till samma platshållare istället för att vänta på steget.
+    # bara en platshållare, se ResolvedSource) — preprocessed_source_material
+    # sätts direkt till samma platshållare; run_generation_pipeline() hoppar
+    # då över preprocessing-anropet helt.
     db_session = SessionModel(
         user_id=x_user_id,
         source_material=source_material,
         preprocessed_source_material=source_material if src.is_images else None,
+        status='processing',
     )
     db.add(db_session)
     db.commit()
@@ -291,187 +369,37 @@ async def generate(
             # det som går förlorat är chattens källförankring i granskningsvyn.
             logging.exception("Promoting staged pages to session storage failed")
 
-    import queue
     import threading
+    threading.Thread(
+        target=run_generation_pipeline,
+        args=(session_id, x_user_id, source_material, language, src.images, src.is_images),
+        daemon=True,
+    ).start()
 
-    chunk_queue = queue.Queue()
-    DONE_SENTINEL = object()
-    ERROR_SENTINEL = object()
+    return {"session_id": session_id, "status": "processing"}
 
-    def run_generator(preprocessed_text):
-        try:
-            for chunk in generate_cards_stream(preprocessed_text, language, src.images):
-                chunk_queue.put(chunk)
-            chunk_queue.put(DONE_SENTINEL)
-        except Exception as e:
-            chunk_queue.put((ERROR_SENTINEL, str(e)))
 
-    async def event_stream():
-        full_tsv = ""
-        stream_buffer = ""
-        title_saved = False
+@app.get("/api/generate/{session_id}/status")
+async def generate_status(
+    session_id: str,
+    x_user_id: str = Header(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Pollas av frontend medan run_generation_pipeline() jobbar i bakgrunden.
+    status: 'processing' | 'reviewing' | 'done' | 'error'.
+    """
+    session = db.query(SessionModel).filter(
+        SessionModel.id == parse_uuid(session_id, "Session"),
+        SessionModel.user_id == x_user_id,
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found.")
 
-        yield f"data: {json.dumps({'type': 'session_id', 'session_id': session_id})}\n\n"
-
-        # Preprocessing — körs här, efter att SSE-anslutningen redan är öppen,
-        # inte innan. asyncio.to_thread() körs i bakgrunden medan vi pollar
-        # den med keepalive-kommentarer var 15:e sekund, samma mönster och
-        # samma MAX_SILENCE-tak som genereringsfasen nedan. Själva funktionen
-        # är fail-open (returnerar source_material oförändrat vid fel), så det
-        # här taket är bara ett skydd mot att en död bakgrundstråd aldrig
-        # svarar — inte den normala vägen.
-        if src.is_images:
-            preprocessed_source_material = source_material
-        else:
-            preprocess_task = asyncio.ensure_future(
-                asyncio.to_thread(preprocess_source_material, source_material)
-            )
-            silence_seconds = 0
-            MAX_SILENCE = 600
-            while not preprocess_task.done():
-                try:
-                    await asyncio.wait_for(asyncio.shield(preprocess_task), timeout=15)
-                except asyncio.TimeoutError:
-                    silence_seconds += 15
-                    if silence_seconds >= MAX_SILENCE:
-                        preprocess_task.cancel()
-                        break
-                    yield ": keepalive\n\n"
-
-            if preprocess_task.cancelled():
-                logging.error("[PREPROCESS] timed out, falling back to original source_material")
-                preprocessed_source_material = source_material
-            elif preprocess_task.exception() is not None:
-                logging.error(f"[PREPROCESS] background task failed: {preprocess_task.exception()}")
-                preprocessed_source_material = source_material
-            else:
-                preprocessed_source_material = preprocess_task.result()
-
-            db_pp = next(get_db())
-            try:
-                db_pp.query(SessionModel).filter(
-                    SessionModel.id == db_session.id
-                ).update({'preprocessed_source_material': preprocessed_source_material})
-                db_pp.commit()
-            except Exception:
-                db_pp.rollback()
-                logging.exception("Failed to save preprocessed_source_material")
-            finally:
-                db_pp.close()
-
-        thread = threading.Thread(target=run_generator, args=(preprocessed_source_material,), daemon=True)
-        thread.start()
-
-        try:
-            silence_seconds = 0
-            MAX_SILENCE = 600
-
-            while True:
-                try:
-                    item = await asyncio.get_event_loop().run_in_executor(
-                        None,
-                        lambda: chunk_queue.get(timeout=15)
-                    )
-                    silence_seconds = 0
-                except queue.Empty:
-                    silence_seconds += 15
-                    if not thread.is_alive() or silence_seconds >= MAX_SILENCE:
-                        yield f"data: {json.dumps({'type': 'error', 'message': 'Timeout – ingen respons från Claude.'})}\n\n"
-                        return
-                    yield ": keepalive\n\n"
-                    continue
-
-                if item is DONE_SENTINEL:
-                    break
-                elif isinstance(item, tuple) and item[0] is ERROR_SENTINEL:
-                    yield f"data: {json.dumps({'type': 'error', 'message': item[1]})}\n\n"
-                    return
-                else:
-                    full_tsv += item
-                    stream_buffer += item
-
-                    while '\n' in stream_buffer:
-                        line, stream_buffer = stream_buffer.split('\n', 1)
-                        stripped_line = line.strip()
-                        if not title_saved and stripped_line.startswith('TITLE:'):
-                            title_saved = True
-                            extracted_title = stripped_line[len('TITLE:'):].strip()
-                            db_title = next(get_db())
-                            try:
-                                db_title.query(SessionModel).filter(
-                                    SessionModel.id == db_session.id
-                                ).update({'title': extracted_title})
-                                db_title.commit()
-                            except Exception:
-                                db_title.rollback()
-                            finally:
-                                db_title.close()
-                            continue  # TITLE-raden når aldrig parse_tsv
-                        for card in parse_tsv(line):
-                            yield f"data: {json.dumps({'type': 'card', 'data': {'text': card['text'], 'extra': card['extra'], 'logg': card['logg']}})}\n\n"
-
-            # Hantera sista raden om Claude avslutar utan \n
-            if stream_buffer.strip():
-                for card in parse_tsv(stream_buffer):
-                    yield f"data: {json.dumps({'type': 'card', 'data': {'text': card['text'], 'extra': card['extra'], 'logg': card['logg']}})}\n\n"
-
-            if not full_tsv.strip():
-                yield f"data: {json.dumps({'type': 'error', 'message': 'Claude returnerade ingen output.'})}\n\n"
-                return
-
-            cards = parse_tsv(full_tsv)
-
-            if not cards:
-                no_cards_payload = json.dumps({'type': 'error', 'message': "We couldn't find anything to turn into cards. Try a text with clearer facts or statements."})
-                yield f"data: {no_cards_payload}\n\n"
-                return
-
-            yield f"data: {json.dumps({'type': 'reviewing'})}\n\n"
-
-            indices_to_remove = await asyncio.to_thread(
-                review_cards, preprocessed_source_material, cards, src.images
-            )
-            if indices_to_remove:
-                remove_set = set(indices_to_remove)
-                cards = [card for i, card in enumerate(cards) if (i + 1) not in remove_set]
-
-            db2 = next(get_db())
-            try:
-                for i, card in enumerate(cards):
-                    db_card = CardModel(
-                        session_id=db_session.id,
-                        user_id=x_user_id,
-                        position=i,
-                        text=card.get('text', ''),
-                        extra=card.get('extra', ''),
-                        tags=card.get('tags', ''),
-                        deck=card.get('deck', ''),
-                        logg=card.get('logg', ''),
-                        card_type=card.get('card_type', 'cloze'),
-                        approved=True
-                    )
-                    db2.add(db_card)
-                db2.commit()
-            except Exception as db_error:
-                db2.rollback()
-                yield f"data: {json.dumps({'type': 'error', 'message': f'Databasfel: {str(db_error)}'})}\n\n"
-                return
-            finally:
-                db2.close()
-
-            yield f"data: {json.dumps({'type': 'done', 'card_count': len(cards)})}\n\n"
-
-        except asyncio.CancelledError:
-            pass
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",
-        }
-    )
+    return {
+        "status": session.status or "processing",
+        "error_message": session.error_message,
+    }
 
 
 # ── /api/generate-vocabulary ─────────────────────────────────────────────────

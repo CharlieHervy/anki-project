@@ -481,8 +481,18 @@ export default function Home() {
     await runGeneration()
   }
 
-  // The actual generation + SSE streaming flow. Entered from handleGenerate
-  // (gate cleared) or from the modal's Confirm button.
+  // The actual generation flow. Entered from handleGenerate (gate cleared) or
+  // from the modal's Confirm button.
+  //
+  // Not an SSE stream anymore. /api/generate kicks off the whole pipeline
+  // (preprocess → generate → review → save) in a backend thread that keeps
+  // running no matter what happens to this connection, and returns
+  // immediately with a session_id. We poll a small status endpoint instead of
+  // holding one long-lived connection open — a big generation used to die on
+  // an infra-level connection timeout even though Claude had already
+  // finished and the cost was already spent. Polling means a dropped request,
+  // a flaky network, or even closing the tab never loses a finished
+  // generation — it only loses this tab's ability to watch it finish.
   async function runGeneration() {
     setState('generating')
     setStreamCards([])
@@ -504,64 +514,77 @@ export default function Home() {
         headers: authHeaders,
         body: formData,
       })
+      const started = await res.json()
 
-      const reader = res.body!.getReader()
-      const decoder = new TextDecoder()
-      let currentSessionId = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        const text = decoder.decode(value)
-        const lines = text.split('\n')
-
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue
-          try {
-            const event = JSON.parse(line.slice(6))
-
-            if (event.type === 'session_id') {
-              currentSessionId = event.session_id
-              setSessionId(currentSessionId)
-            } else if (event.type === 'card') {
-              setStreamCards(prev => [...prev, { ...event.data, approved: true, tags: '', deck: '', example: '', card_type: event.data.card_type ?? 'cloze' }])
-            } else if (event.type === 'reviewing') {
-                setIsReviewing(true)
-            } else if (event.type === 'done') {
-              stopTimer()
-              setStreamDone(true)
-              const cardsRes = await fetch(`${API}/api/cards/${currentSessionId}`, {
-                headers: authHeaders,
-              })
-              const cardsData = await cardsRes.json()
-              setCards(cardsData.cards)
-              setImagesEnabled(cardsData.images_enabled === true)
-              fetch(`${API}/api/sessions/${currentSessionId}/source`, {
-                headers: authHeaders,
-              })
-                .then(r => r.json())
-                .then(data => setSourceMaterial(data.source_material ?? null))
-                .catch(() => {})
-              setTimeout(() => setState('review'), 800)
-            } else if (event.type === 'error') {
-              stopTimer()
-              if (event.message === 'quota_exceeded') {
-                setQuotaExceeded(true)
-                setQuotaExceededReason(
-                  event.reason === 'monthly_quota_exceeded'
-                    ? 'monthly_quota_exceeded'
-                    : 'lifetime_quota_exceeded'
-                )
-              } else {
-                setError(event.message)
-              }
-              setState('upload')
-            }
-          } catch (err) {
-            console.error(err)
-          }
+      if (started.status === 'error' || !started.session_id) {
+        stopTimer()
+        if (started.message === 'quota_exceeded') {
+          setQuotaExceeded(true)
+          setQuotaExceededReason(
+            started.reason === 'monthly_quota_exceeded'
+              ? 'monthly_quota_exceeded'
+              : 'lifetime_quota_exceeded'
+          )
+        } else {
+          setError(started.message || 'Something went wrong. Make sure the backend is running.')
         }
+        setState('upload')
+        return
+      }
+
+      const currentSessionId = started.session_id
+      setSessionId(currentSessionId)
+
+      // Poll until the background pipeline reaches a terminal state. The
+      // interval is deliberately not tight — this is a progress check, not a
+      // live feed, and a generation realistically takes minutes either way.
+      while (true) {
+        await new Promise(resolve => setTimeout(resolve, 4000))
+
+        let statusData: { status?: string; error_message?: string } | null = null
+        try {
+          const statusRes = await fetch(`${API}/api/generate/${currentSessionId}/status`, {
+            headers: authHeaders,
+          })
+          statusData = await statusRes.json()
+        } catch (err) {
+          // One bad poll (network blip) doesn't mean the job failed — the
+          // pipeline is running server-side regardless of this fetch. Just
+          // try again on the next tick.
+          console.error(err)
+          continue
+        }
+
+        if (statusData?.status === 'reviewing') {
+          setIsReviewing(true)
+        } else if (statusData?.status === 'done') {
+          stopTimer()
+          const cardsRes = await fetch(`${API}/api/cards/${currentSessionId}`, {
+            headers: authHeaders,
+          })
+          const cardsData = await cardsRes.json()
+          setCards(cardsData.cards)
+          setImagesEnabled(cardsData.images_enabled === true)
+          // Fill streamCards before flipping streamDone, same reason as in
+          // runVocabularyGeneration: otherwise the header briefly reads
+          // "DONE — 0 CARDS GENERATED" before the real count lands.
+          setStreamCards(cardsData.cards ?? [])
+          setStreamDone(true)
+          fetch(`${API}/api/sessions/${currentSessionId}/source`, {
+            headers: authHeaders,
+          })
+            .then(r => r.json())
+            .then(data => setSourceMaterial(data.source_material ?? null))
+            .catch(() => {})
+          setTimeout(() => setState('review'), 800)
+          return
+        } else if (statusData?.status === 'error') {
+          stopTimer()
+          setError(statusData.error_message || 'Something went wrong.')
+          setState('upload')
+          return
+        }
+        // 'processing' (or an unrecognized/missing status) → keep polling.
       }
     } catch (err) {
       stopTimer()
