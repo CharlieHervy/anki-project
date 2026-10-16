@@ -147,6 +147,10 @@ def run_generation_pipeline(
     images: list[tuple[str, bytes]] | None,
     is_images: bool,
 ) -> None:
+    # UUID-objekt, inte strängen rakt av — matchar hur session_id hanteras
+    # överallt annars där det binds mot SessionModel.id/CardModel.session_id
+    # (t.ex. db_session.id efter db.refresh()), så insert/filter går samma väg.
+    session_uuid = uuid.UUID(session_id)
     db = next(get_db())
     try:
         if is_images:
@@ -155,7 +159,7 @@ def run_generation_pipeline(
             preprocessed_text = source_material
         else:
             preprocessed_text = preprocess_source_material(source_material)
-            db.query(SessionModel).filter(SessionModel.id == session_id).update(
+            db.query(SessionModel).filter(SessionModel.id == session_uuid).update(
                 {'preprocessed_source_material': preprocessed_text}
             )
             db.commit()
@@ -186,7 +190,7 @@ def run_generation_pipeline(
         update_fields = {'status': 'reviewing'}
         if title:
             update_fields['title'] = title
-        db.query(SessionModel).filter(SessionModel.id == session_id).update(update_fields)
+        db.query(SessionModel).filter(SessionModel.id == session_uuid).update(update_fields)
         db.commit()
 
         indices_to_remove = review_cards(preprocessed_text, cards, images)
@@ -196,7 +200,7 @@ def run_generation_pipeline(
 
         for i, card in enumerate(cards):
             db.add(CardModel(
-                session_id=session_id,
+                session_id=session_uuid,
                 user_id=user_id,
                 position=i,
                 text=card.get('text', ''),
@@ -207,13 +211,13 @@ def run_generation_pipeline(
                 card_type=card.get('card_type', 'cloze'),
                 approved=True,
             ))
-        db.query(SessionModel).filter(SessionModel.id == session_id).update({'status': 'done'})
+        db.query(SessionModel).filter(SessionModel.id == session_uuid).update({'status': 'done'})
         db.commit()
     except Exception as e:
         logging.exception(f"[PIPELINE] session {session_id} failed")
         try:
             db.rollback()
-            db.query(SessionModel).filter(SessionModel.id == session_id).update(
+            db.query(SessionModel).filter(SessionModel.id == session_uuid).update(
                 {'status': 'error', 'error_message': str(e)[:500]}
             )
             db.commit()
